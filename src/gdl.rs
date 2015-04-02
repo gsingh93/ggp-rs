@@ -1,13 +1,19 @@
 use game_manager::State;
 
-pub struct Rule;
+pub use gdl_parser::{Description, Clause, Rule, Sentence, Term, Literal, Constant, Variable,
+                     Function, Relation, Proposition, Not, Or, Distinct};
+pub use gdl_parser::parse;
+
+pub type Score = u8;
+
+#[derive(Clone, Eq, PartialEq, Hash)]
 pub struct Role {
     pub name: String
 }
 
 impl Role {
-    pub fn new(name: &str) -> Role {
-        Role { name: name.to_string() }
+    pub fn new(name: String) -> Role {
+        Role { name: name }
     }
 }
 
@@ -17,14 +23,4 @@ impl ToString for Move {
     fn to_string(&self) -> String {
         "".to_string() // TODO
     }
-}
-
-pub type Score = u8;
-
-pub struct GameDesc(pub Vec<Role>, pub Vec<Rule>, pub Vec<Rule>, pub Vec<Rule>, pub Vec<Rule>,
-                    pub Vec<Rule>, pub Vec<Rule>, pub State);
-
-pub fn parse(gdl: &str) -> GameDesc {
-    GameDesc(Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(),
-             State)
 }
