@@ -1,0 +1,16 @@
+[package]
+name = "ggp-rs"
+version = "0.0.1"
+authors = ["Gulshan Singh <gulshan@umich.edu>"]
+
+[dependencies]
+#gdl-parser = "*"
+env_logger = "*"
+hyper = "*"
+log = "*"
+regex = "*"
+regex_macros = "*"
+rand = "*"
+
+[dependencies.gdl-parser]
+path = "/home/gulshan/code/lang/rust/gdl-parser"
