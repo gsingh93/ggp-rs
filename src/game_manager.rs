@@ -19,9 +19,11 @@ pub struct Game {
     role: Role,
     start_clock: u32,
     play_clock: u32,
-    cur_state: State
+    cur_state: State,
+    init_state: State,
 }
 
+#[derive(Clone)]
 pub struct State {
     props: HashSet<Sentence>
 }
@@ -35,10 +37,10 @@ impl State {
 impl Game {
     pub fn new(role: Role, start_clock: u32, play_clock: u32, desc: Description) -> Game {
         let roles = Game::compute_roles(&desc);
-        let init_state = prover::ask(query_builder::next_query(), State::new()).into_state();
+        let init_state = prover::ask(query_builder::init_query(), &State::new()).into_state();
 
         Game { match_state: Started, roles: roles, role: role, start_clock: start_clock,
-               play_clock: play_clock, cur_state: init_state }
+               play_clock: play_clock, init_state: init_state.clone(), cur_state: init_state }
     }
 
     fn compute_roles(desc: &Description) -> Vec<Role> {
@@ -55,8 +57,8 @@ impl Game {
         roles
     }
 
-    pub fn is_terminal(&self, state: State) -> bool {
-        panic!("unimplemented")
+    pub fn is_terminal(&self, state: &State) -> bool {
+        prover::prove(query_builder::terminal_query(), state)
     }
 
     pub fn get_roles(&self) -> &Vec<Role> {
@@ -68,7 +70,7 @@ impl Game {
     }
 
     pub fn get_initial_state(&self) -> &State {
-        panic!("unimplemented")
+        &self.init_state
     }
 
     pub fn get_current_state(&self) -> &State {
@@ -76,27 +78,37 @@ impl Game {
     }
 
     pub fn get_legal_moves(&self, state: &State, role: &Role) -> Vec<Move> {
+        prover::ask(query_builder::legal_query(role), state).into_moves()
+    }
+
+    pub fn get_legal_joint_moves(&self, state: &State) -> Vec<Vec<Move>> {
         panic!("unimplemented")
     }
 
-    pub fn get_legal_joint_moves(&self, state: &State, role: &Role) -> Vec<Vec<Move>> {
-        panic!("unimplemented")
-    }
-
-    pub fn get_goals(&self, state: &State) -> HashMap<Role, Score> {
-        panic!("unimplemented")
+    pub fn get_goals(&self, state: &State) -> Vec<Score> {
+        let mut res = Vec::new();
+        for role in self.roles.iter() {
+            res.push(self.get_goal(state, role))
+        }
+        res
     }
 
     pub fn get_goal(&self, state: &State, role: &Role) -> Score {
-        panic!("unimplemented")
+        prover::ask(query_builder::goal_query(role), state).into_score()
     }
 
     pub fn get_next_states(&self, state: &State) -> Vec<State> {
-        panic!("unimplemented")
+        let mut res = Vec::new();
+        for moves in self.get_legal_joint_moves(state) {
+            res.push(self.get_next_state(state, moves));
+        }
+        res
     }
 
     pub fn get_next_state(&self, state: &State, moves: Vec<Move>) -> State {
-        panic!("unimplemented")
+        let s = state.clone();
+        // TODO: Add moves to s
+        prover::ask(query_builder::next_query(), &s).into_state()
     }
 
     pub fn get_start_clock(&self) -> u32 {

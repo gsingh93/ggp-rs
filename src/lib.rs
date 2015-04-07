@@ -30,11 +30,11 @@ pub use gdl::Move;
 pub trait Player {
     fn get_name(&self) -> String;
 
-    fn meta_game(&self, game: &Game) {}
+    fn meta_game(&self, _: &Game) {}
 
     fn select_move(&self, game: &Game) -> Move;
 
-    fn stop(&self, game: &Game) {}
+    fn stop(&self, _: &Game) {}
 }
 
 pub fn run<T: ToSocketAddrs + 'static, P: Player + Sync + Send + 'static>(host: T, player: P) {

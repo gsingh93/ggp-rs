@@ -8,12 +8,16 @@ pub type Score = u8;
 
 #[derive(Clone, Eq, PartialEq, Hash)]
 pub struct Role {
-    pub name: String
+    name: String
 }
 
 impl Role {
     pub fn new(name: String) -> Role {
         Role { name: name }
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
     }
 }
 
