@@ -2,9 +2,10 @@ use std::collections::{HashMap, HashSet};
 
 use Player;
 use prover::{self, query_builder};
-use gdl::{self, Description, Sentence, Role, Move, Score};
+use gdl::{self, Description, Sentence, Role, Move, Score, Function, Constant};
 use gdl::Clause::SentenceClause;
-use gdl::Sentence::RelSentence;
+use gdl::Sentence::{RelSentence, PropSentence};
+use gdl::Term::{ConstTerm, FuncTerm};
 
 use self::MatchState::{Started, Playing, Finished};
 
@@ -177,7 +178,8 @@ impl<P: Player> GameManager<P> {
     fn handle_play(&mut self, match_id: &str, moves: &str) -> String {
         debug!("Handling play request");
         let game = self.games.get_mut(match_id).unwrap();
-        game.update(Vec::new()); // TODO
+        let moves = parse_moves(moves);
+        game.update(moves);
         let m = self.player.select_move(game);
         m.to_string()
     }
@@ -185,8 +187,30 @@ impl<P: Player> GameManager<P> {
     fn handle_stop(&mut self, match_id: &str, moves: &str) -> String {
         debug!("Handling stop request");
         let game = self.games.get_mut(match_id).unwrap();
-        game.finish(Vec::new()); // TODO
+        let moves = parse_moves(moves);
+        game.finish(moves);
         self.player.stop(game);
         "done".to_string()
     }
+}
+
+fn parse_moves(moves_str: &str) -> Vec<Move> {
+    // Convert to valid GDL by adding a relation name
+    assert_eq!(moves_str.char_at(0), '(');
+    let mut moves_str = moves_str.to_string();
+    moves_str.insert(1, 'a');
+    moves_str.insert(2, ' ');
+
+    let mut gdl = gdl::parse(&moves_str);
+    assert_eq!(gdl.clauses.len(), 1);
+    let clause = gdl.clauses.swap_remove(0);
+    let mut moves = Vec::new();
+    match clause {
+        SentenceClause(s) => match s {
+            RelSentence(r) => moves.push(Move::new(FuncTerm(Function::new(r.name, r.args)))),
+            PropSentence(p) => moves.push(Move::new(ConstTerm(p.name))),
+        },
+        RuleClause => panic!("Expected sentence, got rule")
+    }
+    moves
 }

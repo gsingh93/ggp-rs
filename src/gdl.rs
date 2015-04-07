@@ -21,10 +21,18 @@ impl Role {
     }
 }
 
-pub struct Move;
+pub struct Move {
+    contents: Term
+}
+
+impl Move {
+    pub fn new(t: Term) -> Move {
+        Move { contents: t }
+    }
+}
 
 impl ToString for Move {
     fn to_string(&self) -> String {
-        "".to_string() // TODO
+        panic!("unimplemented")
     }
 }
