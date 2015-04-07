@@ -1,5 +1,3 @@
-use game_manager::State;
-
 pub use gdl_parser::{Description, Clause, Rule, Sentence, Term, Literal, Constant, Variable,
                      Function, Relation, Proposition, Not, Or, Distinct};
 pub use gdl_parser::parse;
@@ -21,8 +19,9 @@ impl Role {
     }
 }
 
+#[derive(Clone, Eq, PartialEq, Hash)]
 pub struct Move {
-    contents: Term
+    pub contents: Term
 }
 
 impl Move {

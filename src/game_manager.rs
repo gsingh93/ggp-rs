@@ -2,8 +2,8 @@ use std::collections::{HashMap, HashSet};
 
 use Player;
 use prover::{self, query_builder};
-use gdl::{self, Description, Sentence, Role, Move, Score, Function, Constant};
-use gdl::Clause::SentenceClause;
+use gdl::{self, Description, Sentence, Role, Move, Score, Function, Constant, Relation};
+use gdl::Clause::{SentenceClause, RuleClause};
 use gdl::Sentence::{RelSentence, PropSentence};
 use gdl::Term::{ConstTerm, FuncTerm};
 
@@ -83,7 +83,12 @@ impl Game {
     }
 
     pub fn get_legal_joint_moves(&self, state: &State) -> Vec<Vec<Move>> {
-        panic!("unimplemented")
+        let mut legal_moves = Vec::new();
+        for role in self.roles.iter() {
+            legal_moves.push(self.get_legal_moves(state, role));
+        }
+
+        cross_product(legal_moves)
     }
 
     pub fn get_goals(&self, state: &State) -> Vec<Score> {
@@ -101,14 +106,18 @@ impl Game {
     pub fn get_next_states(&self, state: &State) -> Vec<State> {
         let mut res = Vec::new();
         for moves in self.get_legal_joint_moves(state) {
-            res.push(self.get_next_state(state, moves));
+            res.push(self.get_next_state(state, &moves));
         }
         res
     }
 
-    pub fn get_next_state(&self, state: &State, moves: Vec<Move>) -> State {
-        let s = state.clone();
-        // TODO: Add moves to s
+    pub fn get_next_state(&self, state: &State, moves: &[Move]) -> State {
+        assert_eq!(moves.len(), self.roles.len());
+        let mut s = state.clone();
+        for (m, r) in moves.iter().zip(self.roles.iter()) {
+            s.props.insert(create_does(r, m));
+        }
+
         prover::ask(query_builder::next_query(), &s).into_state()
     }
 
@@ -120,14 +129,14 @@ impl Game {
         self.play_clock
     }
 
-    fn update(&mut self, moves: Vec<Move>) {
+    fn update(&mut self, moves: &[Move]) {
         if self.match_state != Playing {
             self.match_state = Playing;
         }
         self.cur_state = self.get_next_state(&self.cur_state, moves);
     }
 
-    fn finish(&mut self, moves: Vec<Move>) {
+    fn finish(&mut self, moves: &[Move]) {
         self.cur_state = self.get_next_state(&self.cur_state, moves);
         self.match_state = Finished;
     }
@@ -179,7 +188,7 @@ impl<P: Player> GameManager<P> {
         debug!("Handling play request");
         let game = self.games.get_mut(match_id).unwrap();
         let moves = parse_moves(moves);
-        game.update(moves);
+        game.update(&moves);
         let m = self.player.select_move(game);
         m.to_string()
     }
@@ -188,7 +197,7 @@ impl<P: Player> GameManager<P> {
         debug!("Handling stop request");
         let game = self.games.get_mut(match_id).unwrap();
         let moves = parse_moves(moves);
-        game.finish(moves);
+        game.finish(&moves);
         self.player.stop(game);
         "done".to_string()
     }
@@ -210,7 +219,32 @@ fn parse_moves(moves_str: &str) -> Vec<Move> {
             RelSentence(r) => moves.push(Move::new(FuncTerm(Function::new(r.name, r.args)))),
             PropSentence(p) => moves.push(Move::new(ConstTerm(p.name))),
         },
-        RuleClause => panic!("Expected sentence, got rule")
+        RuleClause(_) => panic!("Expected sentence, got rule")
     }
     moves
+}
+
+fn cross_product<T: Clone>(v: Vec<Vec<T>>) -> Vec<Vec<T>> {
+    fn helper<'a, T: Clone>(v: &'a [Vec<T>], res: &mut Vec<Vec<T>>, partial: &mut Vec<&'a T>) {
+        if v.len() == partial.len() {
+            res.push(partial.iter().map(|x| (**x).clone()).collect());
+        } else {
+            assert!(partial.len() < v.len());
+            for t in v[partial.len()].iter() {
+                partial.push(t);
+                helper(v, res, partial);
+                partial.pop().unwrap();
+            }
+        }
+    }
+
+    let mut res = Vec::new();
+    helper(&*v, &mut res, &mut Vec::new());
+    res
+}
+
+fn create_does(r: &Role, m: &Move) -> Sentence {
+    RelSentence(Relation::new(Constant::new("does".to_string()),
+                              vec![ConstTerm(Constant::new(r.name().to_string())),
+                                   m.contents.clone()]))
 }
