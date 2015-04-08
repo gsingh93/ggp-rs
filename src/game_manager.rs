@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use Player;
-use prover::{self, query_builder};
+use prover::{Prover, query_builder};
 use gdl::{self, Description, Sentence, Role, Move, Score, Function, Constant, Relation};
 use gdl::Clause::{SentenceClause, RuleClause};
 use gdl::Sentence::{RelSentence, PropSentence};
@@ -22,6 +22,7 @@ pub struct Game {
     play_clock: u32,
     cur_state: State,
     init_state: State,
+    prover: Prover
 }
 
 #[derive(Clone)]
@@ -38,10 +39,12 @@ impl State {
 impl Game {
     pub fn new(role: Role, start_clock: u32, play_clock: u32, desc: Description) -> Game {
         let roles = Game::compute_roles(&desc);
-        let init_state = prover::ask(query_builder::init_query(), &State::new()).into_state();
+        let prover = Prover::new(desc);
+        let init_state = prover.ask(query_builder::init_query(), &State::new()).into_state();
 
         Game { match_state: Started, roles: roles, role: role, start_clock: start_clock,
-               play_clock: play_clock, init_state: init_state.clone(), cur_state: init_state }
+               play_clock: play_clock, init_state: init_state.clone(), cur_state: init_state,
+               prover: prover }
     }
 
     fn compute_roles(desc: &Description) -> Vec<Role> {
@@ -59,7 +62,7 @@ impl Game {
     }
 
     pub fn is_terminal(&self, state: &State) -> bool {
-        prover::prove(query_builder::terminal_query(), state)
+        self.prover.prove(query_builder::terminal_query(), state)
     }
 
     pub fn get_roles(&self) -> &Vec<Role> {
@@ -79,7 +82,7 @@ impl Game {
     }
 
     pub fn get_legal_moves(&self, state: &State, role: &Role) -> Vec<Move> {
-        prover::ask(query_builder::legal_query(role), state).into_moves()
+        self.prover.ask(query_builder::legal_query(role), state).into_moves()
     }
 
     pub fn get_legal_joint_moves(&self, state: &State) -> Vec<Vec<Move>> {
@@ -100,7 +103,7 @@ impl Game {
     }
 
     pub fn get_goal(&self, state: &State, role: &Role) -> Score {
-        prover::ask(query_builder::goal_query(role), state).into_score()
+        self.prover.ask(query_builder::goal_query(role), state).into_score()
     }
 
     pub fn get_next_states(&self, state: &State) -> Vec<State> {
@@ -118,7 +121,7 @@ impl Game {
             s.props.insert(create_does(r, m));
         }
 
-        prover::ask(query_builder::next_query(), &s).into_state()
+        self.prover.ask(query_builder::next_query(), &s).into_state()
     }
 
     pub fn get_start_clock(&self) -> u32 {
@@ -216,8 +219,8 @@ fn parse_moves(moves_str: &str) -> Vec<Move> {
     let mut moves = Vec::new();
     match clause {
         SentenceClause(s) => match s {
-            RelSentence(r) => moves.push(Move::new(FuncTerm(Function::new(r.name, r.args)))),
-            PropSentence(p) => moves.push(Move::new(ConstTerm(p.name))),
+            RelSentence(r) => moves.push(Move::new(Function::new(r.name, r.args).into())),
+            PropSentence(p) => moves.push(Move::new(p.name.into())),
         },
         RuleClause(_) => panic!("Expected sentence, got rule")
     }
@@ -244,7 +247,6 @@ fn cross_product<T: Clone>(v: Vec<Vec<T>>) -> Vec<Vec<T>> {
 }
 
 fn create_does(r: &Role, m: &Move) -> Sentence {
-    RelSentence(Relation::new(Constant::new("does".to_string()),
-                              vec![ConstTerm(Constant::new(r.name().to_string())),
-                                   m.contents.clone()]))
+    RelSentence(Relation::new(Constant::new("does"),
+                              vec![Constant::new(r.name()).into(), m.contents.clone()]))
 }

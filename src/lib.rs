@@ -11,6 +11,7 @@ extern crate log;
 mod game_manager;
 mod gdl;
 mod prover;
+mod visitor;
 
 use hyper::Server;
 use hyper::server::{Request, Response, Handler};

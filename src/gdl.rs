@@ -10,8 +10,8 @@ pub struct Role {
 }
 
 impl Role {
-    pub fn new(name: String) -> Role {
-        Role { name: name }
+    pub fn new<T: Into<String>>(name: T) -> Role {
+        Role { name: name.into() }
     }
 
     pub fn name(&self) -> &str {
@@ -32,6 +32,6 @@ impl Move {
 
 impl ToString for Move {
     fn to_string(&self) -> String {
-        panic!("unimplemented")
+        self.contents.to_string()
     }
 }
