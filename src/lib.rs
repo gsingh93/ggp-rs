@@ -1,4 +1,4 @@
-#![feature(std_misc, plugin, str_char)]
+#![feature(std_misc, plugin, str_char, collections)]
 #![plugin(regex_macros)]
 
 extern crate gdl_parser;

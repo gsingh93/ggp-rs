@@ -5,7 +5,6 @@ use prover::{Prover, query_builder};
 use gdl::{self, Description, Sentence, Role, Move, Score, Function, Constant, Relation};
 use gdl::Clause::{SentenceClause, RuleClause};
 use gdl::Sentence::{RelSentence, PropSentence};
-use gdl::Term::{ConstTerm, FuncTerm};
 
 use self::MatchState::{Started, Playing, Finished};
 
@@ -27,7 +26,7 @@ pub struct Game {
 
 #[derive(Clone)]
 pub struct State {
-    props: HashSet<Sentence>
+    pub props: HashSet<Sentence>
 }
 
 impl State {
