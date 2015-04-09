@@ -4,11 +4,11 @@ extern crate ggp_rs;
 use ggp_rs::{Player, Game, Move};
 use std::net::Ipv4Addr;
 
-struct RandomLegalPlayer;
+struct RandomPlayer;
 
-impl Player for RandomLegalPlayer {
+impl Player for RandomPlayer {
     fn get_name(&self) -> String {
-        "RandomLegalPlayer".to_string()
+        "RandomPlayer".to_string()
     }
 
     fn select_move(&self, game: &Game) -> Move {
@@ -21,5 +21,5 @@ impl Player for RandomLegalPlayer {
 }
 
 fn main() {
-    ggp_rs::run((Ipv4Addr::new(127,0,0,1), 3000), RandomLegalPlayer);
+    ggp_rs::run((Ipv4Addr::new(127,0,0,1), 3000), RandomPlayer);
 }

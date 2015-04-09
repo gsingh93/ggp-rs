@@ -24,13 +24,13 @@ pub struct Game {
     prover: Prover
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct State {
     pub props: HashSet<Sentence>
 }
 
 impl State {
-    fn new() -> State {
+    pub fn new() -> State {
         State { props: HashSet::new() }
     }
 }
@@ -39,7 +39,7 @@ impl Game {
     pub fn new(role: Role, start_clock: u32, play_clock: u32, desc: Description) -> Game {
         let roles = Game::compute_roles(&desc);
         let prover = Prover::new(desc);
-        let init_state = prover.ask(query_builder::init_query(), &State::new()).into_state();
+        let init_state = prover.ask(query_builder::init_query(), State::new()).into_state();
 
         Game { match_state: Started, roles: roles, role: role, start_clock: start_clock,
                play_clock: play_clock, init_state: init_state.clone(), cur_state: init_state,
@@ -61,7 +61,7 @@ impl Game {
     }
 
     pub fn is_terminal(&self, state: &State) -> bool {
-        self.prover.prove(query_builder::terminal_query(), state)
+        self.prover.prove(query_builder::terminal_query(), (*state).clone())
     }
 
     pub fn get_roles(&self) -> &Vec<Role> {
@@ -81,7 +81,7 @@ impl Game {
     }
 
     pub fn get_legal_moves(&self, state: &State, role: &Role) -> Vec<Move> {
-        self.prover.ask(query_builder::legal_query(role), state).into_moves()
+        self.prover.ask(query_builder::legal_query(role), (*state).clone()).into_moves()
     }
 
     pub fn get_legal_joint_moves(&self, state: &State) -> Vec<Vec<Move>> {
@@ -102,7 +102,7 @@ impl Game {
     }
 
     pub fn get_goal(&self, state: &State, role: &Role) -> Score {
-        self.prover.ask(query_builder::goal_query(role), state).into_score()
+        self.prover.ask(query_builder::goal_query(role), (*state).clone()).into_score()
     }
 
     pub fn get_next_states(&self, state: &State) -> Vec<State> {
@@ -114,13 +114,16 @@ impl Game {
     }
 
     pub fn get_next_state(&self, state: &State, moves: &[Move]) -> State {
+        if moves[0] == Move::new(Constant::new("nil").into()) {
+            return state.clone();
+        }
         assert_eq!(moves.len(), self.roles.len());
         let mut s = state.clone();
         for (m, r) in moves.iter().zip(self.roles.iter()) {
             s.props.insert(create_does(r, m));
         }
 
-        self.prover.ask(query_builder::next_query(), &s).into_state()
+        self.prover.ask(query_builder::next_query(), s.clone()).into_state()
     }
 
     pub fn get_start_clock(&self) -> u32 {
@@ -155,73 +158,73 @@ impl<P: Player> GameManager<P> {
     }
 
     pub fn handle(&mut self, request: String) -> String {
-        // TODO: Merge these
-        let start_re = regex!(r"\(start ([^ ]+) ([^ ]+) (\(.*\)) (\d+) (\d+)\)");
+        // TODO: This function is nasty
+        let start_re = regex!(r"\(start ([^ ]+) ([^ ]+) \((.*)\) (\d+) (\d+)\)");
         if let Some(caps) = start_re.captures(&request) {
             assert_eq!(caps.len(), 6);
             return self.handle_start(caps.at(1).unwrap(), caps.at(2).unwrap(), caps.at(3).unwrap(),
                               caps.at(4).unwrap().parse().unwrap(),
                               caps.at(5).unwrap().parse().unwrap());
         }
-        let play_re = regex!(r"\(play ([^ ]+) (\(.*\))\)");
+        let play_re = regex!(r"\(play ([^ ]+) \(?(.*)\)?\)");
         if let Some(caps) = play_re.captures(&request) {
             assert_eq!(caps.len(), 3);
             return self.handle_play(caps.at(1).unwrap(), caps.at(2).unwrap());
         }
-        let stop_re = regex!(r"\(stop ([^ ]+) (\(.*\))\)");
+
+        let stop_re = regex!(r"\(stop ([^ ]+) \((.*)\)\)");
         if let Some(caps) = stop_re.captures(&request) {
             assert_eq!(caps.len(), 3);
             return self.handle_stop(caps.at(1).unwrap(), caps.at(2).unwrap());
         }
-        "".to_string()
+        panic!("request didn't match any regex");
     }
 
     fn handle_start(&mut self, match_id: &str, role: &str, game_desc: &str,
                     start_clock: u32, play_clock: u32) -> String {
         debug!("Handling start request");
-        let desc = gdl::parse(game_desc);
+        let desc = gdl::parse(game_desc.trim());
         let game = Game::new(Role::new(role.to_string()), start_clock, play_clock, desc);
         self.player.meta_game(&game);
         self.games.insert(match_id.to_string(), game);
+        debug!("Sending 'ready'");
         "ready".to_string()
     }
 
     fn handle_play(&mut self, match_id: &str, moves: &str) -> String {
         debug!("Handling play request");
-        let game = self.games.get_mut(match_id).unwrap();
+        let game = self.games.get_mut(match_id).expect("Match doesn't exist");
         let moves = parse_moves(moves);
         game.update(&moves);
         let m = self.player.select_move(game);
-        m.to_string()
+        let mov = m.to_string();
+        debug!("Sending {}", mov);
+        mov
     }
 
     fn handle_stop(&mut self, match_id: &str, moves: &str) -> String {
         debug!("Handling stop request");
-        let game = self.games.get_mut(match_id).unwrap();
+        let game = self.games.get_mut(match_id).expect("Match doesn't exist");
         let moves = parse_moves(moves);
         game.finish(&moves);
         self.player.stop(game);
+        debug!("Sending 'done'");
         "done".to_string()
     }
 }
 
 fn parse_moves(moves_str: &str) -> Vec<Move> {
-    // Convert to valid GDL by adding a relation name
-    assert_eq!(moves_str.char_at(0), '(');
-    let mut moves_str = moves_str.to_string();
-    moves_str.insert(1, 'a');
-    moves_str.insert(2, ' ');
-
-    let mut gdl = gdl::parse(&moves_str);
-    assert_eq!(gdl.clauses.len(), 1);
-    let clause = gdl.clauses.swap_remove(0);
+    let gdl = gdl::parse(moves_str);
     let mut moves = Vec::new();
-    match clause {
-        SentenceClause(s) => match s {
+    for clause in gdl.clauses {
+        let sentence = match clause {
+            RuleClause(_) => panic!("Expected sentence, got rule"),
+            SentenceClause(s) => s
+        };
+        match sentence {
             RelSentence(r) => moves.push(Move::new(Function::new(r.name, r.args).into())),
-            PropSentence(p) => moves.push(Move::new(p.name.into())),
-        },
-        RuleClause(_) => panic!("Expected sentence, got rule")
+            PropSentence(p) => moves.push(Move::new(p.name.into()))
+        }
     }
     moves
 }
@@ -248,4 +251,35 @@ fn cross_product<T: Clone>(v: Vec<Vec<T>>) -> Vec<Vec<T>> {
 fn create_does(r: &Role, m: &Move) -> Sentence {
     RelSentence(Relation::new(Constant::new("does"),
                               vec![Constant::new(r.name()).into(), m.contents.clone()]))
+}
+
+#[cfg(test)]
+mod test {
+    use Player;
+    use super::{GameManager, Game};
+    use gdl::Move;
+
+    struct LegalPlayer;
+    impl Player for LegalPlayer {
+        fn get_name(&self) -> String {
+            "LegalPlayer".to_string()
+        }
+
+        fn select_move(&self, game: &Game) -> Move {
+            let state = game.get_current_state();
+            let role = game.get_role();
+            let mut moves = game.get_legal_moves(state, role);
+            moves.swap_remove(0)
+        }
+    }
+
+    #[test]
+    fn test_play_nil() {
+        let mut gm = GameManager::new(LegalPlayer);
+        assert_eq!(
+            &gm.handle("(start match_id black ((role black) (input noop) \
+                        (legal black noop)) 10 5)".to_string()),
+            "ready");
+        assert_eq!(&gm.handle("(play match_id nil)".to_string()), "noop");
+    }
 }

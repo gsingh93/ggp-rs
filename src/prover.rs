@@ -10,47 +10,46 @@ use gdl::Term::{VarTerm, ConstTerm, FuncTerm};
 
 use visitor::{self, Visitor};
 
-use std::mem;
-
 struct SubstitutionVisitor<'a> {
     theta: &'a Substitution
 }
 
-impl<'a> Visitor for SubstitutionVisitor<'a> {
-    fn visit_relation(&mut self, rel: &mut Relation) {
-        for arg in rel.args.iter_mut() {
-            let mut tmp: Term = Constant::new("").into();
-            mem::swap(arg, &mut tmp);
-            self.set_term(tmp, arg);
-        }
-    }
-
-    fn visit_distinct(&mut self, distinct: &mut Distinct) {
-        let mut tmp: Term = Constant::new("").into();
-        mem::swap(&mut distinct.term1, &mut tmp);
-        self.set_term(tmp, &mut distinct.term1);
-    }
-
+impl<'a> SubstitutionVisitor<'a> {
     fn visit_function(&mut self, func: &mut Function) {
         for arg in func.args.iter_mut() {
-            let mut tmp: Term = Constant::new("").into();
-            mem::swap(arg, &mut tmp);
-            self.set_term(tmp, arg);
-        }
-    }
-}
-
-impl<'a> SubstitutionVisitor<'a> {
-    fn set_term(&self, term: Term, loc: &mut Term) {
-        if let VarTerm(v) = term {
-            if let Some(t) = self.theta.get(&v) {
-                *loc = (*t).clone();
+            if let VarTerm(v) = (*arg).clone() {
+                if let Some(t) = self.theta.get(&v) {
+                    *arg = (*t).clone()
+                }
             }
         }
     }
 }
 
-#[derive(Clone)]
+impl<'a> Visitor for SubstitutionVisitor<'a> {
+    fn visit_term(&mut self, term: &mut Term) {
+        let mut t2 = Constant::new("").into();
+        let mut should_replace = false;
+        match term {
+            &mut VarTerm(ref v) => {
+                if let Some(mut t) = self.theta.get(&v).cloned() {
+                    should_replace = true;
+                    while t2 != t {
+                        t2 = t.clone();
+                        self.visit_term(&mut t);
+                    }
+                }
+            },
+            &mut FuncTerm(ref mut f) => { self.visit_function(f); return },
+            &mut ConstTerm(_) => return,
+        }
+        if should_replace {
+            *term = t2;
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct Substitution {
     mapping: HashMap<Variable, Term>
 }
@@ -130,33 +129,42 @@ impl<'a> Visitor for RenamingVisitor<'a> {
     }
 }
 
+type RuleMap = HashMap<Constant, Vec<Rule>>;
+
 pub struct Prover {
-    knowledge_base: HashMap<Sentence, Vec<Rule>>
+    rule_map: RuleMap
 }
 
 impl Prover {
     pub fn new(desc: Description) -> Prover {
-        let mut knowledge_base = HashMap::new();
+        let mut rule_map = HashMap::new();
         for clause in desc.clauses {
             let (entry, r) = match clause {
-                RuleClause(r) => (knowledge_base.entry(r.head.clone()), r),
-                SentenceClause(s) => (knowledge_base.entry(s.clone()), s.into())
+                RuleClause(r) => (rule_map.entry(r.head.name()), r),
+                SentenceClause(s) => (rule_map.entry(s.name()), s.into())
             };
             // The closure should prevent unnecessary allocation of empty `Vec`s
             let v = entry.or_insert_with(|| Vec::new());
             v.push(r);
         }
-        Prover { knowledge_base: knowledge_base }
+        Prover { rule_map: rule_map }
     }
 
-    pub fn ask(&self, query: Sentence, state: &State) -> QueryResult {
+    pub fn ask(&self, query: Sentence, state: State) -> QueryResult {
         let mut goals = VecDeque::new();
         let query: Literal = query.into();
         goals.push_front(query.clone());
 
+        let mut trues = Vec::new();
+        for s in state.props {
+            trues.push(s.into())
+        }
+        let mut context = RuleMap::new();
+        context.insert(Constant::new("true"), trues);
+
         let mut results = Vec::new();
         self.ask_goals(&mut goals, &mut results, &mut VarRenamer::new(), &mut Substitution::new(),
-                       state);
+                       &context);
 
         let mut props = HashSet::new();
         for theta in results {
@@ -171,7 +179,7 @@ impl Prover {
     }
 
     fn ask_goals(&self, goals: &mut VecDeque<Literal>, results: &mut Vec<Substitution>,
-                 renamer: &mut VarRenamer, theta: &mut Substitution, state: &State) {
+                 renamer: &mut VarRenamer, theta: &mut Substitution, state: &RuleMap) {
         let l = match goals.pop_front() {
             None => { results.push(theta.clone()); return },
             Some(l) => l
@@ -192,23 +200,24 @@ impl Prover {
 
     fn ask_prop(&self, prop: Proposition, goals: &mut VecDeque<Literal>,
                 results: &mut Vec<Substitution>, renamer: &mut VarRenamer,
-                theta: &mut Substitution, state: &State) {
+                theta: &mut Substitution, state: &RuleMap) {
         self.ask_rel(Relation::new(prop.name, Vec::new()), goals, results, renamer, theta, state);
     }
 
     fn ask_rel(&self, rel: Relation, goals: &mut VecDeque<Literal>,
                results: &mut Vec<Substitution>, renamer: &mut VarRenamer,
-               theta: &mut Substitution, state: &State) {
+               theta: &mut Substitution, state: &RuleMap) {
         let mut candidates: HashSet<Rule> = HashSet::new();
 
         // Check whether the relation is already a true statement
-        let rel_sentence = rel.clone().into();
-        if state.props.contains(&rel_sentence) {
-            candidates.insert(rel_sentence.into());
+        if let Some(rules) = state.get(&rel.name) {
+            for rule in rules.iter().cloned() {
+                candidates.insert(rule);
+            }
         }
 
         // Get all corresponding rules from the game description
-        if let Some(rules) = self.knowledge_base.get(&rel.clone().into()) {
+        if let Some(rules) = self.rule_map.get(&rel.name) {
             for rule in rules.iter().cloned() {
                 candidates.insert(rule);
             }
@@ -234,7 +243,7 @@ impl Prover {
     }
 
     fn ask_or(&self, or: Or, goals: &mut VecDeque<Literal>, results: &mut Vec<Substitution>,
-              renamer: &mut VarRenamer, theta: &mut Substitution, state: &State) {
+              renamer: &mut VarRenamer, theta: &mut Substitution, state: &RuleMap) {
         for lit in or.lits.into_iter() {
             goals.push_front(lit);
             self.ask_goals(goals, results, renamer, theta, state);
@@ -243,7 +252,7 @@ impl Prover {
     }
 
     fn ask_not(&self, not: Not, goals: &mut VecDeque<Literal>, results: &mut Vec<Substitution>,
-               renamer: &mut VarRenamer, theta: &mut Substitution, state: &State) {
+               renamer: &mut VarRenamer, theta: &mut Substitution, state: &RuleMap) {
         let mut not_goals = VecDeque::new();
         let mut not_results = Vec::new();
 
@@ -257,13 +266,13 @@ impl Prover {
 
     fn ask_distinct(&self, distinct: Distinct, goals: &mut VecDeque<Literal>,
                     results: &mut Vec<Substitution>, renamer: &mut VarRenamer,
-                    theta: &mut Substitution, state: &State) {
+                    theta: &mut Substitution, state: &RuleMap) {
         if distinct.term1 != distinct.term2 {
             self.ask_goals(goals, results, renamer, theta, state);
         }
     }
 
-    pub fn prove(&self, s: Sentence, state: &State) -> bool {
+    pub fn prove(&self, s: Sentence, state: State) -> bool {
         !self.ask(s, state).props.is_empty()
     }
 }
@@ -284,7 +293,7 @@ fn unify_term(x: Term, y: Term, theta: Substitution) -> Option<Substitution> {
         (_, VarTerm(v)) => unify_variable(v, x, theta),
         (ConstTerm(_), ConstTerm(_)) => None,
         (FuncTerm(f1), FuncTerm(f2)) => {
-            match unify_term(f1.name.into(), f2.name.into(), theta) {
+            match unify_term(f1.name.clone().into(), f2.name.clone().into(), theta) {
                 Some(theta) => {
                     assert_eq!(f1.args.len(), f2.args.len());
                     let mut theta = theta;
@@ -324,15 +333,26 @@ pub struct QueryResult {
 
 impl QueryResult {
     pub fn into_state(self) -> State {
-        State { props: self.props }
+        let mut trues = HashSet::new();
+        for s in self.props {
+            match s {
+                RelSentence(mut r) => {
+                    assert_eq!(r.args.len(), 1);
+                    trues.insert(Relation::new(Constant::new("true"),
+                                               vec![r.args.swap_remove(0)]).into());
+                },
+                _ => panic!("Expected RelSentence")
+            }
+        }
+        State { props: trues }
     }
 
     pub fn into_moves(self) -> Vec<Move> {
         let mut moves = Vec::new();
         for s in self.props {
             let term = match s {
-                PropSentence(p) => p.name.into(),
-                RelSentence(r) => Function::new(r.name, r.args).into()
+                RelSentence(mut r) => r.args.swap_remove(1),
+                _ => panic!("Expected RelSentence")
             };
             moves.push(Move::new(term));
         }
@@ -389,5 +409,102 @@ pub mod query_builder {
 
     fn create_const(name: &str) -> Constant {
         Constant::new(name.to_string())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::collections::{HashMap, HashSet};
+
+    use gdl::{self, Relation, Description, Constant, Function, Variable, Role, Move};
+    use gdl::Sentence::RelSentence;
+    use gdl::Clause::SentenceClause;
+
+    use game_manager::State;
+
+    use super::{unify, query_builder, Prover, Substitution};
+
+    fn to_relation(mut desc: Description) -> Relation {
+        let c = desc.clauses.swap_remove(0);
+        match c {
+            SentenceClause(s) => match s {
+                RelSentence(r) => r,
+                _ => panic!("")
+            },
+            _ => panic!("")
+        }
+    }
+
+    #[test]
+    fn test_unify() {
+        let a = to_relation(gdl::parse("(legal white ?l)"));
+        let b = to_relation(gdl::parse("(legal ?p (reduce ?x ?n))"));
+        let c = to_relation(gdl::parse("(reduce ?x ?n)"));
+
+        let mut map = HashMap::new();
+        map.insert(Variable::new(Constant::new("p")), Constant::new("white").into());
+        map.insert(Variable::new(Constant::new("l")), Function::new(c.name, c.args).into());
+        let theta = Substitution { mapping: map };
+        assert_eq!(unify(a, b).unwrap(), theta);
+    }
+
+    #[test]
+    fn test_substitute() {
+        let a = to_relation(gdl::parse("(legal ?p ?m)")).into();
+        let b = to_relation(gdl::parse("(legal white (reduce a 1))")).into();
+
+        let mut mapping = HashMap::new();
+        mapping.insert(Variable::new(Constant::new("p")), Constant::new("white").into());
+        mapping.insert(Variable::new(Constant::new("m")),
+                       Function::new(Constant::new("reduce"),
+                                     vec![Variable::new(Constant::new("R1")).into(),
+                                          Variable::new(Constant::new("R2")).into()]).into());
+        mapping.insert(Variable::new(Constant::new("R1")), Constant::new("a").into());
+        mapping.insert(Variable::new(Constant::new("R2")), Constant::new("1").into());
+        let theta = Substitution { mapping: mapping };
+
+        assert_eq!(theta.substitute(&a), b);
+    }
+
+    #[test]
+    fn test_ask() {
+        let nim = "
+        (<= (legal ?p (reduce ?x ?n)) (true (control ?p)) (true (heap ?x ?m)) (smaller ?n ?m))
+
+        (<= (smaller ?x ?y) (succ ?x ?y))
+        (<= (smaller ?x ?y) (succ ?x ?z) (smaller ?z ?y))
+        (succ 0 1)
+        (succ 1 2)
+        (succ 2 3)
+        (succ 3 4)
+        (succ 4 5)
+
+        (init (heap a 2))
+        (init (heap b 0))
+        (init (heap c 5))
+        (init (control white))";
+
+        let prover = Prover::new(gdl::parse(nim));
+        let init_state = prover.ask(query_builder::init_query(), State::new()).into_state();
+        let mut expected_moves = HashSet::new();
+        for i in 0..2 {
+           expected_moves.insert(Move::new(Function::new(
+               Constant::new("reduce"),
+               vec![Constant::new("a").into(),
+                    Constant::new(i.to_string()).into()]).into()));
+        }
+        for i in 0..5 {
+            expected_moves.insert(Move::new(Function::new(
+                Constant::new("reduce"),
+                vec![Constant::new("c").into(),
+                     Constant::new(i.to_string()).into()]).into()));
+        }
+
+        let results = prover.ask(query_builder::legal_query(&Role::new("white")),
+                                 init_state).into_moves();
+        let results_len = results.len();
+        let results_set: HashSet<Move> = results.into_iter().collect();
+        assert_eq!(results_set.len(), results_len);
+        assert_eq!(results_set, expected_moves);
     }
 }

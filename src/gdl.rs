@@ -4,7 +4,7 @@ pub use gdl_parser::parse;
 
 pub type Score = u8;
 
-#[derive(Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Role {
     name: String
 }
@@ -19,7 +19,7 @@ impl Role {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Move {
     pub contents: Term
 }
