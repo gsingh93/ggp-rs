@@ -12,10 +12,11 @@ use self::Request::{StartRequest, PlayRequest, StopRequest, InfoRequest, AbortRe
                     UnknownRequest};
 
 #[derive(Eq, PartialEq)]
-pub enum MatchState {
+enum MatchState {
     Started, Playing, Finished
 }
 
+/// A description of a game
 pub struct Game {
     match_state: MatchState,
     roles: Vec<Role>,
@@ -27,6 +28,7 @@ pub struct Game {
     prover: Prover
 }
 
+/// The state of a game, containing all `Sentence`s that are true in this state
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct State {
     pub props: HashSet<Sentence>
@@ -39,7 +41,7 @@ impl State {
 }
 
 impl Game {
-    pub fn new(role: Role, start_clock: u32, play_clock: u32, desc: Description) -> Game {
+    fn new(role: Role, start_clock: u32, play_clock: u32, desc: Description) -> Game {
         let roles = Game::compute_roles(&desc);
         let prover = Prover::new(desc);
         let init_state = prover.ask(query_builder::init_query(), State::new()).into_state();
@@ -67,30 +69,38 @@ impl Game {
         roles
     }
 
+    /// Returns true if `state` is a terminal state
     pub fn is_terminal(&self, state: &State) -> bool {
         self.prover.prove(query_builder::terminal_query(), (*state).clone())
     }
 
+    /// Returns the roles of the game
     pub fn get_roles(&self) -> &Vec<Role> {
         &self.roles
     }
 
+    /// Returns role of the player
     pub fn get_role(&self) -> &Role {
         &self.role
     }
 
+    /// Returns the initial state of the game
     pub fn get_initial_state(&self) -> &State {
         &self.init_state
     }
 
+    /// Returns the current state of the game
     pub fn get_current_state(&self) -> &State {
         &self.cur_state
     }
 
+    /// Returns all legal moves for role `role` in the state `state`
     pub fn get_legal_moves(&self, state: &State, role: &Role) -> Vec<Move> {
         self.prover.ask(query_builder::legal_query(role), (*state).clone()).into_moves()
     }
 
+    /// Returns all legal joint moves in state `state`. Each element of the resulting vector is a
+    /// vector that contains a legal move for each player in the game.
     pub fn get_legal_joint_moves(&self, state: &State) -> Vec<Vec<Move>> {
         let mut legal_moves = Vec::new();
         for role in self.roles.iter() {
@@ -112,6 +122,7 @@ impl Game {
         self.prover.ask(query_builder::goal_query(role), (*state).clone()).into_score()
     }
 
+    /// Gets all possible next states given state `state`
     pub fn get_next_states(&self, state: &State) -> Vec<State> {
         let mut res = Vec::new();
         for moves in self.get_legal_joint_moves(state) {
@@ -120,6 +131,7 @@ impl Game {
         res
     }
 
+    /// Gets the next state given state `state` and each players' next move
     pub fn get_next_state(&self, state: &State, moves: &[Move]) -> State {
         if moves[0] == Move::new(Constant::new("nil").into()) {
             return state.clone();
@@ -133,10 +145,12 @@ impl Game {
         self.prover.ask(query_builder::next_query(), s.clone()).into_state()
     }
 
+    /// Gets the start clock time
     pub fn get_start_clock(&self) -> u32 {
         self.start_clock
     }
 
+    /// Gets the play clock time
     pub fn get_play_clock(&self) -> u32 {
         self.play_clock
     }
@@ -146,10 +160,12 @@ impl Game {
             self.match_state = Playing;
         }
         let new_state = self.get_next_state(&self.cur_state, moves);
-        let old_props: Vec<_> = self.cur_state.props.difference(&new_state.props).cloned().collect();
-        let new_props: Vec<_> = new_state.props.difference(&self.cur_state.props).cloned().collect();
-        debug!("Removed propositions: {:?}", old_props);
-        debug!("Added propositions: {:?}", new_props);
+        if cfg!(not(ndebug)) {
+            let old_props: Vec<_> = self.cur_state.props.difference(&new_state.props).cloned().collect();
+            let new_props: Vec<_> = new_state.props.difference(&self.cur_state.props).cloned().collect();
+            debug!("Removed propositions: {:?}", old_props);
+            debug!("Added propositions: {:?}", new_props);
+        }
         self.cur_state = new_state;
     }
 
@@ -189,7 +205,8 @@ impl<P: Player> GameManager<P> {
             PlayRequest(match_id, moves) => self.handle_play(match_id, moves),
             StopRequest(match_id, moves) => self.handle_stop(match_id, moves),
             InfoRequest => "available".to_string(),
-            AbortRequest(_) => "done".to_string(),
+            AbortRequest(match_id) =>
+                self.handle_stop(match_id, vec![Move::new(Constant::new("nil").into())]),
             UnknownRequest(req) => panic!("Unknown request: {}", req)
         }
     }

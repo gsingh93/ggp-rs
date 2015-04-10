@@ -1,4 +1,5 @@
 use std::collections::{HashSet, HashMap, VecDeque};
+use std::collections::hash_map::Entry::{Occupied, Vacant};
 
 use game_manager::State;
 use gdl::{Description, Sentence, Proposition, Relation, Move, Score, Literal, Or, Not, Distinct,
@@ -118,7 +119,7 @@ impl<'a> RenamingVisitor<'a> {
         RenamingVisitor { renamer: renamer, mapping: HashMap::new() }
     }
 }
-use std::collections::hash_map::Entry::{Occupied, Vacant};
+
 impl<'a> Visitor for RenamingVisitor<'a> {
     fn visit_variable(&mut self, var: &mut Variable) {
         let entry = self.mapping.entry(var.name.clone());

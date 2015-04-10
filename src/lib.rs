@@ -1,3 +1,43 @@
+//! A library for creating General Game Playing (GGP) players. This library is based off of
+//! [GGP Base](https://github.com/ggp-org/ggp-base). While GGP Base allows the creation of
+//! players backed by a propositional network or a logic prover, this library currently only
+//! supports logic prover based players.
+//!
+//! # Example
+//!
+//! To create your own player, simply implement the `Player` trait for your struct and pass the
+//! host/port you want the player to run at and the player itself to the `run` function.
+//!
+//! The following example implements a RandomPlayer, which plays random legal moves each turn.
+//!
+//! ```
+//! extern crate rand;
+//! extern crate ggp_rs;
+//!
+//! use ggp_rs::{Player, Game, Move};
+//! use std::net::Ipv4Addr;
+//!
+//! struct RandomPlayer;
+//!
+//! impl Player for RandomPlayer {
+//!     fn get_name(&self) -> String {
+//!         "RandomPlayer".to_string()
+//!     }
+//!
+//!     fn select_move(&self, game: &Game) -> Move {
+//!         let state = game.get_current_state();
+//!         let role = game.get_role();
+//!         let mut moves = game.get_legal_moves(state, role);
+//!         let r = rand::random::<usize>() % moves.len();
+//!         moves.swap_remove(r)
+//!     }
+//! }
+//!
+//! fn main() {
+//!     ggp_rs::run((Ipv4Addr::new(0,0,0,0), 9147), RandomPlayer);
+//! }
+//! ```
+
 #![feature(std_misc, plugin, collections)]
 #![plugin(regex_macros)]
 
@@ -25,9 +65,10 @@ use std::sync::Mutex;
 
 use game_manager::GameManager;
 
-pub use game_manager::Game;
-pub use gdl::Move;
+pub use game_manager::{Game, State};
+pub use gdl::{Move, Role, Score};
 
+/// A GGP player
 pub trait Player {
     fn get_name(&self) -> String;
 
@@ -38,6 +79,7 @@ pub trait Player {
     fn stop(&self, _: &Game) {}
 }
 
+/// Starts a GGP player listening at `host`
 pub fn run<T: ToSocketAddrs + 'static, P: Player + Sync + Send + 'static>(host: T, player: P) {
     let handler = GameHandler::new(player);
     Server::http(handler).listen(host).unwrap();

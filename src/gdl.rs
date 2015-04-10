@@ -2,6 +2,7 @@ pub use gdl_parser::{Description, Clause, Rule, Sentence, Term, Literal, Constan
                      Function, Relation, Proposition, Not, Or, Distinct};
 pub use gdl_parser::parse;
 
+/// The score a player can get at a goal state
 pub type Score = u8;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
