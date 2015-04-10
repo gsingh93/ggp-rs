@@ -8,7 +8,7 @@ use gdl::Literal::{OrLit, NotLit, DistinctLit, PropLit, RelLit};
 use gdl::Sentence::{PropSentence, RelSentence};
 use gdl::Term::{VarTerm, ConstTerm, FuncTerm};
 
-use visitor::{self, Visitor};
+use gdl_parser::visitor::{self, Visitor};
 
 struct SubstitutionVisitor<'a> {
     theta: &'a Substitution
