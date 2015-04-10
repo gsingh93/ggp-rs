@@ -2,6 +2,9 @@
 name = "ggp-rs"
 version = "0.0.1"
 authors = ["Gulshan Singh <gulshan@umich.edu>"]
+description = "A library for creating General Game Playing (GGP) players"
+license = "MIT"
+repository = "https://github.com/gsingh93/ggp-rs"
 
 [dependencies]
 gdl-parser = "*"
