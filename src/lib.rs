@@ -15,6 +15,7 @@ mod visitor;
 
 use hyper::Server;
 use hyper::server::{Request, Response, Handler};
+use hyper::header::ContentLength;
 use hyper::net::Fresh;
 
 use std::net::ToSocketAddrs;
@@ -54,8 +55,7 @@ impl<P: Player + Send> GameHandler<P> {
 }
 
 impl<P: Player + Sync + Send> Handler for GameHandler<P> {
-    fn handle(&self, mut req: Request, res: Response<Fresh>) {
-        let mut res = res.start().unwrap();
+    fn handle(&self, mut req: Request, mut res: Response<Fresh>) {
         let mut s = String::new();
         req.read_to_string(&mut s).unwrap();
         let s = s.into_ascii_lowercase();
@@ -63,7 +63,10 @@ impl<P: Player + Sync + Send> Handler for GameHandler<P> {
 
         let mut gm = self.gm.lock().unwrap();
         let s = gm.handle(s);
-        res.write_all(&s.into_bytes()).unwrap();
+        let s = s.into_bytes();
+        res.headers_mut().set(ContentLength(s.len() as u64));
+        let mut res = res.start().unwrap();
+        res.write_all(&s).unwrap();
         res.end().unwrap();
     }
 }
