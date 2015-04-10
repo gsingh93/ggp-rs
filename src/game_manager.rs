@@ -5,6 +5,7 @@ use prover::{Prover, query_builder};
 use gdl::{self, Description, Sentence, Role, Move, Score, Function, Constant, Relation};
 use gdl::Clause::{SentenceClause, RuleClause};
 use gdl::Sentence::{RelSentence, PropSentence};
+use gdl::Term::ConstTerm;
 
 use self::MatchState::{Started, Playing, Finished};
 use self::Request::{StartRequest, PlayRequest, StopRequest, UnknownRequest};
@@ -53,7 +54,11 @@ impl Game {
             if let &SentenceClause(ref s) = clause {
                 if let &RelSentence(ref r) = s {
                     if r.name.name == "role" {
-                        roles.push(Role::new(r.name.name.to_string()))
+                        assert_eq!(r.args.len(), 1);
+                        match &r.args[0] {
+                            &ConstTerm(ref c) => roles.push(Role::new(c.name.to_string())),
+                            _ => panic!("Expected constant term")
+                        }
                     }
                 }
             }
@@ -139,7 +144,12 @@ impl Game {
         if self.match_state != Playing {
             self.match_state = Playing;
         }
-        self.cur_state = self.get_next_state(&self.cur_state, moves);
+        let new_state = self.get_next_state(&self.cur_state, moves);
+        let old_props: Vec<_> = self.cur_state.props.difference(&new_state.props).cloned().collect();
+        let new_props: Vec<_> = new_state.props.difference(&self.cur_state.props).cloned().collect();
+        debug!("Removed propositions: {:?}", old_props);
+        debug!("Added propositions: {:?}", new_props);
+        self.cur_state = new_state;
     }
 
     fn finish(&mut self, moves: &[Move]) {
@@ -153,7 +163,7 @@ pub struct GameManager<P> {
     games: HashMap<String, Game>
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 enum Request {
     StartRequest(String, Role, Description, u32, u32),
     PlayRequest(String, Vec<Move>),
@@ -340,7 +350,7 @@ impl RequestParser {
         }
         self.consume('(').unwrap();
         self.consume_whitespace();
-        let r = regex!(r"(?P<relation>\(\))|(?P<prop>[a-zA-Z0-9_]+)");
+        let r = regex!(r"(?P<relation>\([^)]+\))|(?P<prop>[a-zA-Z0-9_]+)");
         let mut moves = Vec::new();
         let remaining_str = &self.s[self.pos..].to_string();
         for cap in r.captures_iter(&remaining_str) {
@@ -426,8 +436,9 @@ fn create_does(r: &Role, m: &Move) -> Sentence {
 mod test {
     extern crate env_logger;
     use Player;
-    use super::{GameManager, Game};
-    use gdl::Move;
+    use super::{GameManager, Game, RequestParser};
+    use super::Request::PlayRequest;
+    use gdl::{Move, Constant, Function};
 
     struct LegalPlayer;
     impl Player for LegalPlayer {
@@ -471,5 +482,19 @@ mod test {
         assert_eq!(&gm.handle("(play match_id nil)".to_string()), "p");
         assert_eq!(&gm.handle("(play match_id (p noop))".to_string()), "noop");
         assert_eq!(&gm.handle("(play match_id (noop p))".to_string()), "p");
+    }
+
+    #[test]
+    fn test_parse_play() {
+        let mut parser = RequestParser::new("(play testmatch_1 ((move 4 1 3 1) noop))".to_string());
+        let expected = PlayRequest("testmatch_1".to_string(),
+                                   vec![Move::new(
+                                       Function::new(Constant::new("move"),
+                                                     vec![Constant::new("4").into(),
+                                                          Constant::new("1").into(),
+                                                          Constant::new("3").into(),
+                                                          Constant::new("1").into()]).into()),
+                                        Move::new(Constant::new("noop").into())]);
+        assert_eq!(parser.parse(), expected);
     }
 }

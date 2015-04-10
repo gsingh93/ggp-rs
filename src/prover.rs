@@ -156,11 +156,19 @@ impl Prover {
         goals.push_front(query.clone());
 
         let mut trues = Vec::new();
+        let mut does = Vec::new();
         for s in state.props {
-            trues.push(s.into())
+            let name = s.name();
+            if name == Constant::new("true") {
+                trues.push(s.into())
+            } else if name == Constant::new("does") {
+                does.push(s.into());
+            }
         }
         let mut context = RuleMap::new();
         context.insert(Constant::new("true"), trues);
+        context.insert(Constant::new("does"), does);
+        debug!("context: {:?}", context);
 
         let mut results = Vec::new();
         self.ask_goals(&mut goals, &mut results, &mut VarRenamer::new(), &mut Substitution::new(),
@@ -180,6 +188,7 @@ impl Prover {
 
     fn ask_goals(&self, goals: &mut VecDeque<Literal>, results: &mut Vec<Substitution>,
                  renamer: &mut VarRenamer, theta: &mut Substitution, state: &RuleMap) {
+        debug!("goals: {:?}", goals);
         let l = match goals.pop_front() {
             None => { results.push(theta.clone()); return },
             Some(l) => l
@@ -223,6 +232,7 @@ impl Prover {
             }
         }
 
+        debug!("{} candidates found for unification", candidates.len());
         for rule in candidates {
             let rule = renamer.rename(&rule);
             let rel_head = match rule.head.clone() {
@@ -230,7 +240,9 @@ impl Prover {
                 RelSentence(r) => r
             };
 
+            debug!("Unifying {:?} and {:?}", rel_head, rel);
             if let Some(theta_prime) = unify(rel_head, rel.clone()) {
+                debug!("Unification Success");
                 let mut new_goals = VecDeque::new();
                 for r in rule.body.clone() {
                     new_goals.push_back(r);
@@ -238,6 +250,8 @@ impl Prover {
                 new_goals.append(&mut goals.clone());
                 self.ask_goals(&mut new_goals, results, renamer, &mut theta.compose(theta_prime),
                                state);
+            } else {
+                debug!("Unification failure");
             }
         }
     }
@@ -533,6 +547,46 @@ mod test {
             Constant::new("true"),
             vec![Function::new(Constant::new("control"),
                                vec![Constant::new("red").into()]).into()]).into());
+        assert_eq!(next_state, State { props: props })
+    }
+
+    #[test]
+    fn test_next_state_does() {
+        let gdl = "(role black) (role red) \
+                   (<= (legal black noop) (true (control red))) \
+                   (<= (legal red noop) (true (control black))) \
+                   (<= (legal black p) (true (control black))) \
+                   (<= (legal red p) (true (control red))) \
+                   (init (control black)) \
+                   (<= (next (control black)) (true (control red))) \
+                   (<= (next (control red)) (true (control black))) \
+                   (<= (next q) (or (does red p) (true q))) \
+                   (<= (next s) (or (does black p) (true s)))";
+        let prover = Prover::new(gdl::parse(gdl));
+        let mut init_state = prover.ask(query_builder::init_query(), State::new()).into_state();
+        let mut props = HashSet::new();
+        props.insert(Relation::new(
+            Constant::new("true"),
+            vec![Function::new(Constant::new("control"),
+                               vec![Constant::new("black").into()]).into()]).into());
+        assert_eq!(init_state, State { props: props });
+
+        init_state.props.insert(
+            Relation::new(Constant::new("does"),
+                          vec![Constant::new("red").into(), Constant::new("p").into()]).into());
+        init_state.props.insert(
+            Relation::new(Constant::new("does"),
+                          vec![Constant::new("black").into(), Constant::new("p").into()]).into());
+
+        let next_state = prover.ask(query_builder::next_query(), init_state).into_state();
+
+        let mut props = HashSet::new();
+        props.insert(Relation::new(
+            Constant::new("true"),
+            vec![Function::new(Constant::new("control"),
+                               vec![Constant::new("red").into()]).into()]).into());
+        props.insert(Relation::new(Constant::new("true"), vec![Constant::new("q").into()]).into());
+        props.insert(Relation::new(Constant::new("true"), vec![Constant::new("s").into()]).into());
         assert_eq!(next_state, State { props: props })
     }
 }
