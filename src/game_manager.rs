@@ -8,7 +8,8 @@ use gdl::Sentence::{RelSentence, PropSentence};
 use gdl::Term::ConstTerm;
 
 use self::MatchState::{Started, Playing, Finished};
-use self::Request::{StartRequest, PlayRequest, StopRequest, UnknownRequest};
+use self::Request::{StartRequest, PlayRequest, StopRequest, InfoRequest, AbortRequest,
+                    UnknownRequest};
 
 #[derive(Eq, PartialEq)]
 pub enum MatchState {
@@ -168,6 +169,8 @@ enum Request {
     StartRequest(String, Role, Description, u32, u32),
     PlayRequest(String, Vec<Move>),
     StopRequest(String, Vec<Move>),
+    InfoRequest,
+    AbortRequest(String),
     UnknownRequest(String)
 }
 
@@ -185,36 +188,38 @@ impl<P: Player> GameManager<P> {
                 self.handle_start(match_id, role, desc, start_clock, play_clock),
             PlayRequest(match_id, moves) => self.handle_play(match_id, moves),
             StopRequest(match_id, moves) => self.handle_stop(match_id, moves),
+            InfoRequest => "available".to_string(),
+            AbortRequest(_) => "done".to_string(),
             UnknownRequest(req) => panic!("Unknown request: {}", req)
         }
     }
 
     fn handle_start(&mut self, match_id: String, role: Role, desc: Description,
                     start_clock: u32, play_clock: u32) -> String {
-        debug!("Handling start request" );
+        info!("Handling start request" );
         let game = Game::new(role, start_clock, play_clock, desc);
         self.player.meta_game(&game);
         self.games.insert(match_id, game);
-        debug!("Sending 'ready'");
+        info!("Sending 'ready'");
         "ready".to_string()
     }
 
     fn handle_play(&mut self, match_id: String, moves: Vec<Move>) -> String {
-        debug!("Handling play request");
+        info!("Handling play request");
         let game = self.games.get_mut(&match_id).expect("Match doesn't exist");
         game.update(&moves);
         let m = self.player.select_move(game);
         let mov = m.to_string();
-        debug!("Sending {}", mov);
+        info!("Sending {}", mov);
         mov
     }
 
     fn handle_stop(&mut self, match_id: String, moves: Vec<Move>) -> String {
-        debug!("Handling stop request");
+        info!("Handling stop request");
         let game = self.games.get_mut(&match_id).expect("Match doesn't exist");
         game.finish(&moves);
         self.player.stop(game);
-        debug!("Sending 'done'");
+        info!("Sending 'done'");
         "done".to_string()
     }
 }
@@ -267,6 +272,8 @@ impl RequestParser {
         self.consume('(').unwrap();
         self.consume_whitespace();
         match self.peek() {
+            'a' => self.parse_abort(),
+            'i' => InfoRequest,
             'p' => self.parse_play(),
             's' => {
                 self.consume('s').unwrap();
@@ -279,6 +286,18 @@ impl RequestParser {
             },
             _ => UnknownRequest(self.s.clone())
         }
+    }
+
+    fn parse_abort(&mut self) -> Request {
+        self.consume_str("abort").unwrap();
+        self.consume_whitespace();
+
+        let match_id = self.parse_string();
+        self.consume_whitespace();
+
+        self.consume(')').unwrap();
+
+        AbortRequest(match_id)
     }
 
     fn parse_start(&mut self) -> Request {
@@ -336,7 +355,7 @@ impl RequestParser {
         let mut res = String::new();
         let mut c = self.peek();
         while (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
-            || c == '_' {
+            || c == '_' || c == '.' {
             res.push(self.next());
             c = self.peek();
         }

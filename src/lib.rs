@@ -59,7 +59,7 @@ impl<P: Player + Sync + Send> Handler for GameHandler<P> {
         let mut s = String::new();
         req.read_to_string(&mut s).unwrap();
         let s = s.into_ascii_lowercase();
-        debug!("Got request: {}", s);
+        info!("Got request: {}", s);
 
         let mut gm = self.gm.lock().unwrap();
         let s = gm.handle(s);
