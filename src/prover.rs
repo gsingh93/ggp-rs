@@ -507,4 +507,32 @@ mod test {
         assert_eq!(results_set.len(), results_len);
         assert_eq!(results_set, expected_moves);
     }
+
+    #[test]
+    fn test_next_state() {
+        let gdl = "(role black) (role red) \
+                   (<= (legal black noop) (true (control red))) \
+                   (<= (legal red noop) (true (control black))) \
+                   (<= (legal black p) (true (control black))) \
+                   (<= (legal red p) (true (control red))) \
+                   (init (control black)) \
+                   (<= (next (control black)) (true (control red))) \
+                   (<= (next (control red)) (true (control black)))";
+        let prover = Prover::new(gdl::parse(gdl));
+        let init_state = prover.ask(query_builder::init_query(), State::new()).into_state();
+        let mut props = HashSet::new();
+        props.insert(Relation::new(
+            Constant::new("true"),
+            vec![Function::new(Constant::new("control"),
+                               vec![Constant::new("black").into()]).into()]).into());
+        assert_eq!(init_state, State { props: props });
+        let next_state = prover.ask(query_builder::next_query(), init_state).into_state();
+
+        let mut props = HashSet::new();
+        props.insert(Relation::new(
+            Constant::new("true"),
+            vec![Function::new(Constant::new("control"),
+                               vec![Constant::new("red").into()]).into()]).into());
+        assert_eq!(next_state, State { props: props })
+    }
 }

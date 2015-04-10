@@ -7,6 +7,7 @@ use gdl::Clause::{SentenceClause, RuleClause};
 use gdl::Sentence::{RelSentence, PropSentence};
 
 use self::MatchState::{Started, Playing, Finished};
+use self::Request::{StartRequest, PlayRequest, StopRequest, UnknownRequest};
 
 #[derive(Eq, PartialEq)]
 pub enum MatchState {
@@ -24,7 +25,7 @@ pub struct Game {
     prover: Prover
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct State {
     pub props: HashSet<Sentence>
 }
@@ -152,49 +153,45 @@ pub struct GameManager<P> {
     games: HashMap<String, Game>
 }
 
+#[derive(Debug)]
+enum Request {
+    StartRequest(String, Role, Description, u32, u32),
+    PlayRequest(String, Vec<Move>),
+    StopRequest(String, Vec<Move>),
+    UnknownRequest(String)
+}
+
 impl<P: Player> GameManager<P> {
     pub fn new(p: P) -> GameManager<P> {
         GameManager { games: HashMap::new(), player: p }
     }
 
     pub fn handle(&mut self, request: String) -> String {
-        // TODO: This function is nasty
-        let start_re = regex!(r"\(start ([^ ]+) ([^ ]+) \((.*)\) (\d+) (\d+)\)");
-        if let Some(caps) = start_re.captures(&request) {
-            assert_eq!(caps.len(), 6);
-            return self.handle_start(caps.at(1).unwrap(), caps.at(2).unwrap(), caps.at(3).unwrap(),
-                              caps.at(4).unwrap().parse().unwrap(),
-                              caps.at(5).unwrap().parse().unwrap());
+        let mut parser = RequestParser::new(request);
+        let req = parser.parse();
+        debug!("Parsed request: {:?}", req);
+        match req {
+            StartRequest(match_id, role, desc, start_clock, play_clock) =>
+                self.handle_start(match_id, role, desc, start_clock, play_clock),
+            PlayRequest(match_id, moves) => self.handle_play(match_id, moves),
+            StopRequest(match_id, moves) => self.handle_stop(match_id, moves),
+            UnknownRequest(req) => panic!("Unknown request: {}", req)
         }
-        let play_re = regex!(r"\(play ([^ ]+) \(?(.*)\)?\)");
-        if let Some(caps) = play_re.captures(&request) {
-            assert_eq!(caps.len(), 3);
-            return self.handle_play(caps.at(1).unwrap(), caps.at(2).unwrap());
-        }
-
-        let stop_re = regex!(r"\(stop ([^ ]+) \((.*)\)\)");
-        if let Some(caps) = stop_re.captures(&request) {
-            assert_eq!(caps.len(), 3);
-            return self.handle_stop(caps.at(1).unwrap(), caps.at(2).unwrap());
-        }
-        panic!("request didn't match any regex");
     }
 
-    fn handle_start(&mut self, match_id: &str, role: &str, game_desc: &str,
+    fn handle_start(&mut self, match_id: String, role: Role, desc: Description,
                     start_clock: u32, play_clock: u32) -> String {
-        debug!("Handling start request");
-        let desc = gdl::parse(game_desc.trim());
-        let game = Game::new(Role::new(role.to_string()), start_clock, play_clock, desc);
+        debug!("Handling start request" );
+        let game = Game::new(role, start_clock, play_clock, desc);
         self.player.meta_game(&game);
-        self.games.insert(match_id.to_string(), game);
+        self.games.insert(match_id, game);
         debug!("Sending 'ready'");
         "ready".to_string()
     }
 
-    fn handle_play(&mut self, match_id: &str, moves: &str) -> String {
+    fn handle_play(&mut self, match_id: String, moves: Vec<Move>) -> String {
         debug!("Handling play request");
-        let game = self.games.get_mut(match_id).expect("Match doesn't exist");
-        let moves = parse_moves(moves);
+        let game = self.games.get_mut(&match_id).expect("Match doesn't exist");
         game.update(&moves);
         let m = self.player.select_move(game);
         let mov = m.to_string();
@@ -202,10 +199,9 @@ impl<P: Player> GameManager<P> {
         mov
     }
 
-    fn handle_stop(&mut self, match_id: &str, moves: &str) -> String {
+    fn handle_stop(&mut self, match_id: String, moves: Vec<Move>) -> String {
         debug!("Handling stop request");
-        let game = self.games.get_mut(match_id).expect("Match doesn't exist");
-        let moves = parse_moves(moves);
+        let game = self.games.get_mut(&match_id).expect("Match doesn't exist");
         game.finish(&moves);
         self.player.stop(game);
         debug!("Sending 'done'");
@@ -213,20 +209,193 @@ impl<P: Player> GameManager<P> {
     }
 }
 
-fn parse_moves(moves_str: &str) -> Vec<Move> {
-    let gdl = gdl::parse(moves_str);
-    let mut moves = Vec::new();
-    for clause in gdl.clauses {
-        let sentence = match clause {
-            RuleClause(_) => panic!("Expected sentence, got rule"),
-            SentenceClause(s) => s
-        };
-        match sentence {
-            RelSentence(r) => moves.push(Move::new(Function::new(r.name, r.args).into())),
-            PropSentence(p) => moves.push(Move::new(p.name.into()))
+struct RequestParser {
+    s: String,
+    pos: usize
+}
+
+impl RequestParser {
+    fn new(req: String) -> RequestParser {
+        RequestParser { s: req, pos: 0 }
+    }
+
+    fn peek(&self) -> char {
+        assert!(self.s.len() > self.pos);
+        self.s[self.pos..].chars().next().unwrap()
+    }
+
+    fn consume(&mut self, c: char) -> Result<(), String> {
+        let p = self.peek();
+        if p == c {
+            self.pos += 1;
+            Ok(())
+        } else {
+            Err(format!("Expected {} at position {} but got {}", c, self.pos, p))
         }
     }
-    moves
+
+    fn consume_str(&mut self, s: &str) -> Result<(), String> {
+        for c in s.chars() {
+            try!(self.consume(c))
+        }
+        Ok(())
+    }
+
+    fn consume_whitespace(&mut self) {
+        while self.peek() == ' ' {
+            self.consume(' ').unwrap();
+        }
+    }
+
+    fn next(&mut self) -> char {
+        let c = self.peek();
+        self.consume(c).unwrap();
+        c
+    }
+
+    fn parse(&mut self) -> Request {
+        self.consume('(').unwrap();
+        self.consume_whitespace();
+        match self.peek() {
+            'p' => self.parse_play(),
+            's' => {
+                self.consume('s').unwrap();
+                self.consume('t').unwrap();
+                match self.peek() {
+                    'a' => self.parse_start(),
+                    'o' => self.parse_stop(),
+                    _ => UnknownRequest(self.s.clone())
+                }
+            },
+            _ => UnknownRequest(self.s.clone())
+        }
+    }
+
+    fn parse_start(&mut self) -> Request {
+        self.consume_str("art").unwrap();
+        self.consume_whitespace();
+
+        let match_id = self.parse_string();
+        self.consume_whitespace();
+
+        let role = Role::new(self.parse_string());
+        self.consume_whitespace();
+
+        let desc = self.parse_gdl();
+        self.consume_whitespace();
+
+        let start_clock = self.parse_int();
+        self.consume_whitespace();
+
+        let play_clock = self.parse_int();
+        self.consume_whitespace();
+
+        self.consume(')').unwrap();
+        StartRequest(match_id, role, desc, start_clock, play_clock)
+    }
+
+    fn parse_play(&mut self) -> Request {
+        self.consume_str("play").unwrap();
+        self.consume_whitespace();
+
+        let match_id = self.parse_string();
+        self.consume_whitespace();
+
+        let moves = self.parse_move_list();
+        self.consume_whitespace();
+
+        self.consume(')').unwrap();
+        PlayRequest(match_id, moves)
+    }
+
+    fn parse_stop(&mut self) -> Request {
+        self.consume_str("op").unwrap();
+        self.consume_whitespace();
+
+        let match_id = self.parse_string();
+        self.consume_whitespace();
+
+        let moves = self.parse_move_list();
+        self.consume_whitespace();
+
+        self.consume(')').unwrap();
+        StopRequest(match_id, moves)
+    }
+
+    fn parse_string(&mut self) -> String {
+        let mut res = String::new();
+        let mut c = self.peek();
+        while (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+            || c == '_' {
+            res.push(self.next());
+            c = self.peek();
+        }
+        res
+    }
+
+    fn parse_move_list(&mut self) -> Vec<Move> {
+        match self.peek() {
+            '(' => (),
+            _ => return vec![Move::new(Constant::new(self.parse_string()).into())]
+        }
+        self.consume('(').unwrap();
+        self.consume_whitespace();
+        let r = regex!(r"(?P<relation>\(\))|(?P<prop>[a-zA-Z0-9_]+)");
+        let mut moves = Vec::new();
+        let remaining_str = &self.s[self.pos..].to_string();
+        for cap in r.captures_iter(&remaining_str) {
+            match cap.name("relation") {
+                Some(r) => {
+                    self.consume_str(&r).unwrap();
+                    self.consume_whitespace();
+                    let mut desc = gdl::parse(r);
+                    assert_eq!(desc.clauses.len(), 1);
+                    let clause = desc.clauses.swap_remove(0);
+                    let sentence = match clause {
+                        SentenceClause(s) => s,
+                        RuleClause(_) => panic!("Expected SentenceClause")
+                    };
+                    match sentence {
+                        RelSentence(r) => moves.push(Move::new(Function::new(r.name,
+                                                                             r.args).into())),
+                        PropSentence(_) => panic!("Expected RelSentence")
+                    }
+                },
+                None => {
+                    let s = cap.name("prop").expect("Move must be a proposition");
+                    self.consume_str(&s).unwrap();
+                    self.consume_whitespace();
+                    moves.push(Move::new(Constant::new(s).into()));
+                }
+            }
+        }
+
+        self.consume(')').unwrap();
+        moves
+    }
+
+    fn parse_gdl(&mut self) -> Description {
+        let r = regex!(r"\((.*)\).");
+        let gdl = {
+            let caps = r.captures(&self.s[self.pos..]).unwrap();
+            assert_eq!(caps.len(), 2);
+            caps.at(1).unwrap().to_string()
+        };
+        self.consume('(').unwrap();
+        self.consume_str(&gdl).unwrap();
+        self.consume(')').unwrap();
+        gdl::parse(&gdl)
+    }
+
+    fn parse_int(&mut self) -> u32 {
+        let mut res = String::new();
+        let mut c = self.peek();
+        while c >= '0' && c <= '9' {
+            res.push(self.next());
+            c = self.peek();
+        }
+        res.parse().unwrap()
+    }
 }
 
 fn cross_product<T: Clone>(v: Vec<Vec<T>>) -> Vec<Vec<T>> {
@@ -255,6 +424,7 @@ fn create_does(r: &Role, m: &Move) -> Sentence {
 
 #[cfg(test)]
 mod test {
+    extern crate env_logger;
     use Player;
     use super::{GameManager, Game};
     use gdl::Move;
@@ -269,6 +439,7 @@ mod test {
             let state = game.get_current_state();
             let role = game.get_role();
             let mut moves = game.get_legal_moves(state, role);
+            assert!(!moves.is_empty());
             moves.swap_remove(0)
         }
     }
@@ -281,5 +452,24 @@ mod test {
                         (legal black noop)) 10 5)".to_string()),
             "ready");
         assert_eq!(&gm.handle("(play match_id nil)".to_string()), "noop");
+    }
+
+    #[test]
+    fn test_play_turns() {
+        env_logger::init().unwrap();
+        let mut gm = GameManager::new(LegalPlayer);
+        assert_eq!(
+            &gm.handle("(start match_id black ((role black) (role red) \
+                        (<= (legal black noop) (true (control red))) \
+                        (<= (legal red noop) (true (control black))) \
+                        (<= (legal black p) (true (control black))) \
+                        (<= (legal red p) (true (control red))) \
+                        (init (control black)) \
+                        (<= (next (control black)) (true (control red))) \
+                        (<= (next (control red)) (true (control black)))) 10 5)".to_string()),
+            "ready");
+        assert_eq!(&gm.handle("(play match_id nil)".to_string()), "p");
+        assert_eq!(&gm.handle("(play match_id (p noop))".to_string()), "noop");
+        assert_eq!(&gm.handle("(play match_id (noop p))".to_string()), "p");
     }
 }
