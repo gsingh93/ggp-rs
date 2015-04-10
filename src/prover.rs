@@ -140,8 +140,8 @@ impl Prover {
         let mut rule_map = HashMap::new();
         for clause in desc.clauses {
             let (entry, r) = match clause {
-                RuleClause(r) => (rule_map.entry(r.head.name()), r),
-                SentenceClause(s) => (rule_map.entry(s.name()), s.into())
+                RuleClause(r) => (rule_map.entry(r.head.name().clone()), r),
+                SentenceClause(s) => (rule_map.entry(s.name().clone()), s.into())
             };
             // The closure should prevent unnecessary allocation of empty `Vec`s
             let v = entry.or_insert_with(|| Vec::new());
@@ -157,11 +157,12 @@ impl Prover {
 
         let mut trues = Vec::new();
         let mut does = Vec::new();
+        let true_const = Constant::new("true");
+        let does_const = Constant::new("does");
         for s in state.props {
-            let name = s.name();
-            if name == Constant::new("true") {
+            if *s.name() == true_const {
                 trues.push(s.into())
-            } else if name == Constant::new("does") {
+            } else if *s.name() == does_const {
                 does.push(s.into());
             }
         }
@@ -352,8 +353,7 @@ impl QueryResult {
             match s {
                 RelSentence(mut r) => {
                     assert_eq!(r.args.len(), 1);
-                    trues.insert(Relation::new(Constant::new("true"),
-                                               vec![r.args.swap_remove(0)]).into());
+                    trues.insert(Relation::new("true", vec![r.args.swap_remove(0)]).into());
                 },
                 _ => panic!("Expected RelSentence")
             }
@@ -391,38 +391,28 @@ impl QueryResult {
 }
 
 pub mod query_builder {
-    use gdl::{Sentence, Relation, Proposition, Constant, Variable, Term, Role};
-    use gdl::Sentence::{RelSentence, PropSentence};
-    use gdl::Term::{VarTerm, ConstTerm};
+    use gdl::{Sentence, Relation, Proposition, Constant, Variable, Role};
 
     pub fn next_query() -> Sentence {
-        RelSentence(Relation::new(create_const("next"), vec![create_var_term("x")]))
+        Relation::new("next", vec![Variable::new("x").into()]).into()
     }
 
     pub fn terminal_query() -> Sentence {
-        PropSentence(Proposition::new(create_const("terminal")))
+        Proposition::new("terminal").into()
     }
 
     pub fn legal_query(role: &Role) -> Sentence {
-        RelSentence(Relation::new(create_const("legal"), vec![ConstTerm(create_const(role.name())),
-                                                              create_var_term("m")]))
+        Relation::new("legal", vec![Constant::new(role.name()).into(),
+                                    Variable::new("m").into()]).into()
     }
 
     pub fn goal_query(role: &Role) -> Sentence {
-        RelSentence(Relation::new(create_const("goal"), vec![ConstTerm(create_const(role.name())),
-                                                             create_var_term("s")]))
+        Relation::new("goal", vec![Constant::new(role.name()).into(),
+                                               Variable::new("s").into()]).into()
     }
 
     pub fn init_query() -> Sentence {
-        RelSentence(Relation::new(create_const("init"), vec![create_var_term("i")]))
-    }
-
-    fn create_var_term(name: &str) -> Term {
-        VarTerm(Variable::new(create_const(name)))
-    }
-
-    fn create_const(name: &str) -> Constant {
-        Constant::new(name.to_string())
+        Relation::new("init", vec![Variable::new("i").into()]).into()
     }
 }
 
@@ -456,8 +446,8 @@ mod test {
         let c = to_relation(gdl::parse("(reduce ?x ?n)"));
 
         let mut map = HashMap::new();
-        map.insert(Variable::new(Constant::new("p")), Constant::new("white").into());
-        map.insert(Variable::new(Constant::new("l")), Function::new(c.name, c.args).into());
+        map.insert(Variable::new("p"), Constant::new("white").into());
+        map.insert(Variable::new("l"), Function::new(c.name, c.args).into());
         let theta = Substitution { mapping: map };
         assert_eq!(unify(a, b).unwrap(), theta);
     }
@@ -468,13 +458,13 @@ mod test {
         let b = to_relation(gdl::parse("(legal white (reduce a 1))")).into();
 
         let mut mapping = HashMap::new();
-        mapping.insert(Variable::new(Constant::new("p")), Constant::new("white").into());
-        mapping.insert(Variable::new(Constant::new("m")),
-                       Function::new(Constant::new("reduce"),
-                                     vec![Variable::new(Constant::new("R1")).into(),
-                                          Variable::new(Constant::new("R2")).into()]).into());
-        mapping.insert(Variable::new(Constant::new("R1")), Constant::new("a").into());
-        mapping.insert(Variable::new(Constant::new("R2")), Constant::new("1").into());
+        mapping.insert(Variable::new("p"), Constant::new("white").into());
+        mapping.insert(Variable::new("m"),
+                       Function::new("reduce",
+                                     vec![Variable::new("R1").into(),
+                                          Variable::new("R2").into()]).into());
+        mapping.insert(Variable::new("R1"), Constant::new("a").into());
+        mapping.insert(Variable::new("R2"), Constant::new("1").into());
         let theta = Substitution { mapping: mapping };
 
         assert_eq!(theta.substitute(&a), b);
@@ -502,16 +492,14 @@ mod test {
         let init_state = prover.ask(query_builder::init_query(), State::new()).into_state();
         let mut expected_moves = HashSet::new();
         for i in 0..2 {
-           expected_moves.insert(Move::new(Function::new(
-               Constant::new("reduce"),
-               vec![Constant::new("a").into(),
-                    Constant::new(i.to_string()).into()]).into()));
+           expected_moves.insert(Move::new(
+               Function::new("reduce", vec![Constant::new("a").into(),
+                                            Constant::new(i.to_string()).into()]).into()));
         }
         for i in 0..5 {
-            expected_moves.insert(Move::new(Function::new(
-                Constant::new("reduce"),
-                vec![Constant::new("c").into(),
-                     Constant::new(i.to_string()).into()]).into()));
+            expected_moves.insert(Move::new(Function::new("reduce",
+                                                          vec![Constant::new("c").into(),
+                                                               Constant::new(i.to_string()).into()]).into()));
         }
 
         let results = prover.ask(query_builder::legal_query(&Role::new("white")),
@@ -535,18 +523,18 @@ mod test {
         let prover = Prover::new(gdl::parse(gdl));
         let init_state = prover.ask(query_builder::init_query(), State::new()).into_state();
         let mut props = HashSet::new();
-        props.insert(Relation::new(
-            Constant::new("true"),
-            vec![Function::new(Constant::new("control"),
-                               vec![Constant::new("black").into()]).into()]).into());
+        props.insert(
+            Relation::new("true",
+                          vec![Function::new("control",
+                                             vec![Constant::new("black").into()]).into()]).into());
         assert_eq!(init_state, State { props: props });
         let next_state = prover.ask(query_builder::next_query(), init_state).into_state();
 
         let mut props = HashSet::new();
-        props.insert(Relation::new(
-            Constant::new("true"),
-            vec![Function::new(Constant::new("control"),
-                               vec![Constant::new("red").into()]).into()]).into());
+        props.insert(
+            Relation::new("true",
+                          vec![Function::new("control",
+                                             vec![Constant::new("red").into()]).into()]).into());
         assert_eq!(next_state, State { props: props })
     }
 
@@ -566,27 +554,27 @@ mod test {
         let mut init_state = prover.ask(query_builder::init_query(), State::new()).into_state();
         let mut props = HashSet::new();
         props.insert(Relation::new(
-            Constant::new("true"),
-            vec![Function::new(Constant::new("control"),
+            "true",
+            vec![Function::new("control",
                                vec![Constant::new("black").into()]).into()]).into());
         assert_eq!(init_state, State { props: props });
 
         init_state.props.insert(
-            Relation::new(Constant::new("does"),
+            Relation::new("does",
                           vec![Constant::new("red").into(), Constant::new("p").into()]).into());
         init_state.props.insert(
-            Relation::new(Constant::new("does"),
+            Relation::new("does",
                           vec![Constant::new("black").into(), Constant::new("p").into()]).into());
 
         let next_state = prover.ask(query_builder::next_query(), init_state).into_state();
 
         let mut props = HashSet::new();
-        props.insert(Relation::new(
-            Constant::new("true"),
-            vec![Function::new(Constant::new("control"),
-                               vec![Constant::new("red").into()]).into()]).into());
-        props.insert(Relation::new(Constant::new("true"), vec![Constant::new("q").into()]).into());
-        props.insert(Relation::new(Constant::new("true"), vec![Constant::new("s").into()]).into());
+        props.insert(
+            Relation::new("true",
+                          vec![Function::new(Constant::new("control"),
+                                             vec![Constant::new("red").into()]).into()]).into());
+        props.insert(Relation::new("true", vec![Constant::new("q").into()]).into());
+        props.insert(Relation::new("true", vec![Constant::new("s").into()]).into());
         assert_eq!(next_state, State { props: props })
     }
 }

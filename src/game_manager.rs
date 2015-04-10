@@ -447,8 +447,7 @@ fn cross_product<T: Clone>(v: Vec<Vec<T>>) -> Vec<Vec<T>> {
 }
 
 fn create_does(r: &Role, m: &Move) -> Sentence {
-    RelSentence(Relation::new(Constant::new("does"),
-                              vec![Constant::new(r.name()).into(), m.contents.clone()]))
+    Relation::new("does", vec![Constant::new(r.name()).into(), m.contents.clone()]).into()
 }
 
 #[cfg(test)]
@@ -508,7 +507,7 @@ mod test {
         let mut parser = RequestParser::new("(play testmatch_1 ((move 4 1 3 1) noop))".to_string());
         let expected = PlayRequest("testmatch_1".to_string(),
                                    vec![Move::new(
-                                       Function::new(Constant::new("move"),
+                                       Function::new("move",
                                                      vec![Constant::new("4").into(),
                                                           Constant::new("1").into(),
                                                           Constant::new("3").into(),
