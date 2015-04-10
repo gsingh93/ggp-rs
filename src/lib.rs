@@ -10,7 +10,7 @@
 //!
 //! The following example implements a RandomPlayer, which plays random legal moves each turn.
 //!
-//! ```
+//! ```ignore
 //! extern crate rand;
 //! extern crate ggp_rs;
 //!
