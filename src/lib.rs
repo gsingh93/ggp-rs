@@ -44,6 +44,7 @@
 extern crate gdl_parser;
 extern crate hyper;
 extern crate regex;
+extern crate unicase;
 
 #[macro_use]
 extern crate log;
@@ -52,10 +53,14 @@ mod game_manager;
 mod gdl;
 mod prover;
 
+use unicase::UniCase;
+
 use hyper::Server;
 use hyper::server::{Request, Response, Handler};
-use hyper::header::ContentLength;
+use hyper::header::{ContentLength, ContentType, AccessControlAllowOrigin,
+                    AccessControlAllowHeaders};
 use hyper::net::Fresh;
+use hyper::version::HttpVersion;
 
 use std::net::ToSocketAddrs;
 use std::io::Read;
@@ -106,6 +111,11 @@ impl<P: Player + Sync + Send> Handler for GameHandler<P> {
         let s = gm.handle(s);
         let s = s.into_bytes();
         res.headers_mut().set(ContentLength(s.len() as u64));
+        res.headers_mut().set(ContentType("text/acl".parse().unwrap()));
+        res.headers_mut().set(AccessControlAllowOrigin::Any);
+        res.headers_mut().set(AccessControlAllowHeaders(
+            vec![UniCase("Content-Type".to_string())]));
+        res.version = HttpVersion::Http10;
         let mut res = res.start().unwrap();
         res.write_all(&s).unwrap();
         res.end().unwrap();
