@@ -6,6 +6,10 @@ description = "A library for creating General Game Playing (GGP) players"
 license = "MIT"
 repository = "https://github.com/gsingh93/ggp-rs"
 
+[lib]
+name = "ggp_rs"
+doctest = false
+
 [dependencies]
 gdl-parser = "*"
 env_logger = "*"

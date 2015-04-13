@@ -110,6 +110,7 @@ impl Game {
         cross_product(legal_moves)
     }
 
+    /// Returns the score for each player in state `state`
     pub fn get_goals(&self, state: &State) -> Vec<Score> {
         let mut res = Vec::new();
         for role in self.roles.iter() {
@@ -118,6 +119,7 @@ impl Game {
         res
     }
 
+    /// Returns the score for role `role` in state `state`
     pub fn get_goal(&self, state: &State, role: &Role) -> Score {
         self.prover.ask(query_builder::goal_query(role), (*state).clone()).into_score()
     }
