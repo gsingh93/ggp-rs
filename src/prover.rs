@@ -379,8 +379,8 @@ impl QueryResult {
         match self.props.into_iter().next().unwrap() {
             RelSentence(mut r) => {
                 assert_eq!(r.name, Constant::new("goal"));
-                assert_eq!(r.args.len(), 1);
-                let score = r.args.swap_remove(0);
+                assert_eq!(r.args.len(), 2);
+                let score = r.args.swap_remove(1);
                 match score {
                     ConstTerm(c) => c.name.parse().unwrap(),
                     _ => panic!("Expected ConstTerm")
