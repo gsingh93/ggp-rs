@@ -2,6 +2,8 @@ use std::collections::{HashSet, HashMap, VecDeque};
 use std::collections::hash_map::Entry::{Occupied, Vacant};
 
 use game_manager::State;
+use prover::negative_literal_mover;
+
 use gdl::{Description, Sentence, Proposition, Relation, Move, Score, Literal, Or, Not, Distinct,
           Variable, Constant, Term, Function, Rule};
 use gdl::Clause::{SentenceClause, RuleClause};
@@ -138,6 +140,8 @@ pub struct Prover {
 
 impl Prover {
     pub fn new(desc: Description) -> Prover {
+        let desc = negative_literal_mover::run(desc);
+
         let mut rule_map = HashMap::new();
         for clause in desc.clauses {
             let (entry, r) = match clause {
