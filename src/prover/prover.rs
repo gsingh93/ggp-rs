@@ -140,7 +140,7 @@ pub struct Prover {
 
 impl Prover {
     pub fn new(desc: Description) -> Prover {
-        let desc = negative_literal_mover::run(desc);
+        let desc = negative_literal_mover::reorder(desc);
 
         let mut rule_map = HashMap::new();
         for clause in desc.clauses {
