@@ -1,1 +1,7 @@
-language: rust
+install:
+  - curl -f -L https://static.rust-lang.org/rustup.sh -O
+  - sudo sh rustup.sh --channel=nightly --date=2015-04-13
+  - sudo ldconfig
+script:
+  - cargo build --verbose
+  - cargo test --verbose
