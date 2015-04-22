@@ -226,16 +226,12 @@ impl Prover {
 
         // Check whether the relation is already a true statement
         if let Some(rules) = state.get(&rel.name) {
-            for rule in rules.iter().cloned() {
-                candidates.insert(rule);
-            }
+            candidates.extend(rules.clone());
         }
 
         // Get all corresponding rules from the game description
         if let Some(rules) = self.rule_map.get(&rel.name) {
-            for rule in rules.iter().cloned() {
-                candidates.insert(rule);
-            }
+            candidates.extend(rules.clone());
         }
 
         debug!("{} candidates found for unification", candidates.len());
@@ -502,9 +498,10 @@ mod test {
                                             Constant::new(i.to_string()).into()]).into()));
         }
         for i in 0..5 {
-            expected_moves.insert(Move::new(Function::new("reduce",
-                                                          vec![Constant::new("c").into(),
-                                                               Constant::new(i.to_string()).into()]).into()));
+            expected_moves.insert(Move::new(
+                Function::new("reduce",
+                              vec![Constant::new("c").into(),
+                                   Constant::new(i.to_string()).into()]).into()));
         }
 
         let results = prover.ask(query_builder::legal_query(&Role::new("white")),
@@ -581,5 +578,30 @@ mod test {
         props.insert(Relation::new("true", vec![Constant::new("q").into()]).into());
         props.insert(Relation::new("true", vec![Constant::new("s").into()]).into());
         assert_eq!(next_state, State { props: props })
+    }
+}
+
+#[cfg(test)]
+mod bench {
+    extern crate test;
+
+    use self::test::Bencher;
+
+    use super::{query_builder, Prover};
+    use gdl::{self, Role};
+    use game_manager::State;
+
+    use std::fs::File;
+    use std::io::Read;
+
+    #[bench]
+    fn bench_tictactoe7(b: &mut Bencher) {
+        let mut gdl = String::new();
+        File::open("resources/tictactoe7.gdl").unwrap().read_to_string(&mut gdl).ok();
+        let desc = gdl::parse(&gdl);
+        let prover = Prover::new(desc);
+        let role = Role::new("white");
+        let init_state = prover.ask(query_builder::init_query(), State::new()).into_state();
+        b.iter(|| prover.ask(query_builder::legal_query(&role), init_state.clone()).into_moves());
     }
 }

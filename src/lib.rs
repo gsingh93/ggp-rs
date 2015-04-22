@@ -39,6 +39,7 @@
 //! ```
 
 #![feature(std_misc, plugin, collections)]
+#![cfg_attr(test, feature(test))]
 #![plugin(regex_macros)]
 
 extern crate gdl_parser;
