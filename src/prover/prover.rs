@@ -435,6 +435,8 @@ pub mod query_builder {
 #[cfg(test)]
 mod test {
     use std::collections::{HashMap, HashSet};
+    use std::fs::File;
+    use std::io::Read;
 
     use gdl::{self, Relation, Description, Constant, Function, Variable, Role, Move};
     use gdl::Sentence::RelSentence;
@@ -443,6 +445,16 @@ mod test {
     use game_manager::State;
 
     use super::{unify, query_builder, Prover, Substitution};
+
+    fn construct_prover(filename: &str) -> (Prover, State) {
+        let mut gdl = String::new();
+        File::open(filename).unwrap().read_to_string(&mut gdl).ok();
+
+        let prover = Prover::new(gdl::parse(&gdl));
+        let init_state = prover.ask(query_builder::init_query(), State::new()).into_state();
+
+        (prover, init_state)
+    }
 
     fn to_relation(mut desc: Description) -> Relation {
         let c = desc.clauses.swap_remove(0);
@@ -488,24 +500,8 @@ mod test {
 
     #[test]
     fn test_ask() {
-        let nim = "
-        (<= (legal ?p (reduce ?x ?n)) (true (control ?p)) (true (heap ?x ?m)) (smaller ?n ?m))
+        let (prover, init_state) = construct_prover("resources/nim.gdl");
 
-        (<= (smaller ?x ?y) (succ ?x ?y))
-        (<= (smaller ?x ?y) (succ ?x ?z) (smaller ?z ?y))
-        (succ 0 1)
-        (succ 1 2)
-        (succ 2 3)
-        (succ 3 4)
-        (succ 4 5)
-
-        (init (heap a 2))
-        (init (heap b 0))
-        (init (heap c 5))
-        (init (control white))";
-
-        let prover = Prover::new(gdl::parse(nim));
-        let init_state = prover.ask(query_builder::init_query(), State::new()).into_state();
         let mut expected_moves = HashSet::new();
         for i in 0..2 {
            expected_moves.insert(Move::new(
@@ -594,29 +590,39 @@ mod test {
         props.insert(Relation::new("true", vec![Constant::new("s").into()]).into());
         assert_eq!(next_state, State { props: props })
     }
-}
 
-#[cfg(test)]
-mod bench {
-    extern crate test;
-
-    use self::test::Bencher;
-
-    use super::{query_builder, Prover};
-    use gdl::{self, Role};
-    use game_manager::State;
-
-    use std::fs::File;
-    use std::io::Read;
-
-    #[bench]
-    fn bench_tictactoe7(b: &mut Bencher) {
-        let mut gdl = String::new();
-        File::open("resources/tictactoe7.gdl").unwrap().read_to_string(&mut gdl).ok();
-        let desc = gdl::parse(&gdl);
-        let prover = Prover::new(desc);
+    #[ignore]
+    #[test]
+    fn test_recursive1() {
+        let (prover, init_state) = construct_prover("resources/nim-recursive1.gdl");
         let role = Role::new("white");
-        let init_state = prover.ask(query_builder::init_query(), State::new()).into_state();
-        b.iter(|| prover.ask(query_builder::legal_query(&role), init_state.clone()).into_moves());
+        prover.ask(query_builder::legal_query(&role), init_state);
+    }
+
+    #[ignore]
+    #[test]
+    fn test_recursive2() {
+        let (prover, init_state) = construct_prover("resources/nim-recursive2.gdl");
+        let role = Role::new("white");
+        prover.ask(query_builder::legal_query(&role), init_state);
+    }
+
+    mod bench {
+        extern crate test;
+
+        use self::test::Bencher;
+
+        use super::construct_prover;
+        use super::super::query_builder;
+        use gdl::Role;
+
+        #[bench]
+        fn bench_tictactoe7(b: &mut Bencher) {
+            let (prover, init_state) = construct_prover("resources/tictactoe7.gdl");
+            let role = Role::new("white");
+
+            b.iter(||
+                   prover.ask(query_builder::legal_query(&role), init_state.clone()).into_moves());
+        }
     }
 }

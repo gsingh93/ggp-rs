@@ -1,0 +1,14 @@
+(<= (legal ?p (reduce ?x ?n)) (true (control ?p)) (true (heap ?x ?m)) (smaller ?n ?m))
+
+(<= (smaller ?x ?y) (succ ?x ?y))
+(<= (smaller ?x ?y) (succ ?x ?z) (smaller ?z ?y))
+(succ 0 1)
+(succ 1 2)
+(succ 2 3)
+(succ 3 4)
+(succ 4 5)
+
+(init (heap a 2))
+(init (heap b 0))
+(init (heap c 5))
+(init (control white))
