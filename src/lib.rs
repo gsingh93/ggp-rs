@@ -57,6 +57,7 @@ mod prover;
 use unicase::UniCase;
 
 use hyper::Server;
+use hyper::error::HttpError::HttpIoError;
 use hyper::server::{Request, Response, Handler};
 use hyper::header::{ContentLength, ContentType, AccessControlAllowOrigin,
                     AccessControlAllowHeaders};
@@ -64,8 +65,7 @@ use hyper::net::Fresh;
 use hyper::version::HttpVersion;
 
 use std::net::ToSocketAddrs;
-use std::io::Read;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::ascii::OwnedAsciiExt;
 use std::sync::Mutex;
 
@@ -88,7 +88,11 @@ pub trait Player {
 /// Starts a GGP player listening at `host`
 pub fn run<T: ToSocketAddrs + 'static, P: Player + Sync + Send + 'static>(host: T, player: P) {
     let handler = GameHandler::new(player);
-    Server::http(handler).listen(host).unwrap();
+    match Server::http(handler).listen(host) {
+        Err(HttpIoError(e)) => panic!("{}", e),
+        Err(e) => panic!("{}", e),
+        _ => ()
+    }
 }
 
 struct GameHandler<P: Player + Send> {
