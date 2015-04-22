@@ -1,9 +1,13 @@
+//! The `deorer` module transforms a game description into a semantically equivalent game
+//! description with all `or` literals removed.
+
 use gdl::{Description, Rule, Literal, Not};
 use gdl::Clause::RuleClause;
 use gdl::Literal::{OrLit, NotLit};
 
 use self::ExpansionResult::{ExpandedOr, ExpandedNot, NoExpansion};
 
+/// Remove all `or` literals from the game description
 pub fn deor(desc: Description) -> Description {
     let mut new_clauses = Vec::new();
     for clause in desc.clauses {
@@ -20,6 +24,7 @@ pub fn deor(desc: Description) -> Description {
     Description::new(new_clauses)
 }
 
+/// Remove the `or` literals from each rule in `rules` and return the new rules
 fn deor_rules(rules: Vec<Rule>) -> Vec<Rule> {
     let mut res = Vec::new();
     for rule in rules {
@@ -28,10 +33,18 @@ fn deor_rules(rules: Vec<Rule>) -> Vec<Rule> {
     res
 }
 
+/// Remove the `or` literals from rule `r` and return the new rules. For example, the rule
+/// (<= p (or a b)) would turn into the two rules (<= p a) and (<= p b). The rule
+/// (<= p (not (or a b))) should return the single rule (<= p (not a) (not b)).
 fn deor_rule(r: Rule) -> Vec<Rule> {
     let rule = r.clone();
+
+    // Expand each literal in the body of the rule
     for (i, lit) in r.body.into_iter().enumerate() {
+        // Find the first `or` in the literal and expand it into multiple rules
         match expand_first_or(lit) {
+            // If we find an `or` before any `not`s, we make one new rule for each argument
+            // to the `or`
             ExpandedOr(expanded_lit) => {
                 let mut new_rules = Vec::new();
                 for l in expanded_lit {
@@ -41,6 +54,7 @@ fn deor_rule(r: Rule) -> Vec<Rule> {
                 }
                 return deor_rules(new_rules);
             }
+            // If we find a `not` then an `or`, we make one new rule using De Morgan's law
             ExpandedNot(nots) => {
                 let mut new_rule = rule.clone();
                 new_rule.body.swap_remove(i);
@@ -49,6 +63,7 @@ fn deor_rule(r: Rule) -> Vec<Rule> {
                 }
                 return deor_rules(vec![new_rule]);
             }
+            // There were no `or`s in the literal
             NoExpansion => ()
         }
     }
@@ -74,16 +89,20 @@ fn expand_first_or(lit: Literal) -> ExpansionResult {
                 return ExpandedOr(res);
             }
             NotLit(not) => {
+                // We keep track of how many `not`s we've seen and recurse until there are no more
+                // literals or we find an `or`
                 let mut res = Vec::new();
                 *num_nots += 1;
                 match recurse(*not.lit, num_nots) {
                     ExpandedOr(expanded_lit) => {
                         if *num_nots % 2 == 1 {
+                            // The number of `not`s is odd, so we must apply De Morgan's law once
                             for l in expanded_lit {
                                 res.push(Not::new(Box::new(l)));
                             }
                             return ExpandedNot(res);
                         } else {
+                            // The number of `not`s, is even, so they cancel each other out
                             return ExpandedOr(expanded_lit);
                         }
                     }

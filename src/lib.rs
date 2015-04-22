@@ -107,22 +107,24 @@ impl<P: Player + Send> GameHandler<P> {
 
 impl<P: Player + Sync + Send> Handler for GameHandler<P> {
     fn handle(&self, mut req: Request, mut res: Response<Fresh>) {
-        let mut s = String::new();
-        req.read_to_string(&mut s).unwrap();
-        let s = s.into_ascii_lowercase();
-        info!("Got request: {}", s);
+        let mut req_str = String::new();
+        req.read_to_string(&mut req_str).unwrap();
+        let req_str = req_str.into_ascii_lowercase();
+        info!("Got request: {}", req_str);
 
-        let mut gm = self.gm.lock().unwrap();
-        let s = gm.handle(s);
-        let s = s.into_bytes();
-        res.headers_mut().set(ContentLength(s.len() as u64));
+        let response = {
+            let mut gm = self.gm.lock().unwrap();
+            gm.handle(req_str)
+        };
+        let response = response.into_bytes();
+        res.headers_mut().set(ContentLength(response.len() as u64));
         res.headers_mut().set(ContentType("text/acl".parse().unwrap()));
         res.headers_mut().set(AccessControlAllowOrigin::Any);
         res.headers_mut().set(AccessControlAllowHeaders(
             vec![UniCase("Content-Type".to_string())]));
         res.version = HttpVersion::Http10;
         let mut res = res.start().unwrap();
-        res.write_all(&s).unwrap();
+        res.write_all(&response).unwrap();
         res.end().unwrap();
     }
 }

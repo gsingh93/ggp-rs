@@ -1,3 +1,6 @@
+//! Contains objects for proving queries about a game description. A description of the algorithms
+//! used can be found [here](http://logic.stanford.edu/ggp/chapters/chapter_13.html)
+
 use std::collections::{HashSet, HashMap, VecDeque};
 use std::collections::hash_map::Entry::{Occupied, Vacant};
 
@@ -13,6 +16,7 @@ use gdl::Term::{VarTerm, ConstTerm, FuncTerm};
 
 use gdl_parser::visitor::{self, Visitor};
 
+/// A visitor that applies the substitution `theta` to all variables in a literal
 struct SubstitutionVisitor<'a> {
     theta: &'a Substitution
 }
@@ -52,6 +56,7 @@ impl<'a> Visitor for SubstitutionVisitor<'a> {
     }
 }
 
+/// A mapping from `Variable`s to `Term`s
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct Substitution {
     mapping: HashMap<Variable, Term>
@@ -86,6 +91,7 @@ impl Substitution {
     }
 }
 
+/// Generates new variable names of the form `?R0`, `?R1`, etc.
 struct VarRenamer {
     id: u32
 }
@@ -142,6 +148,7 @@ impl Prover {
     pub fn new(desc: Description) -> Prover {
         let desc = negative_literal_mover::reorder(desc);
 
+        // Convert the game description into a mapping between rule heads and rules
         let mut rule_map = HashMap::new();
         for clause in desc.clauses {
             let (entry, r) = match clause {
@@ -155,11 +162,19 @@ impl Prover {
         Prover { rule_map: rule_map }
     }
 
+    // Ask whether the query `query` is true in the state `state`
+    pub fn prove(&self, query: Sentence, state: State) -> bool {
+        !self.ask(query, state).props.is_empty()
+    }
+
+    // Ask whether the query `query` is true in the state `state`
     pub fn ask(&self, query: Sentence, state: State) -> QueryResult {
         let mut goals = VecDeque::new();
         let query: Literal = query.into();
         goals.push_front(query.clone());
 
+        // Create a mapping from rule heads to rules from the given state. The only two types of
+        // rule heads in the state should be `true` and `does` relations
         let mut trues = Vec::new();
         let mut does = Vec::new();
         let true_const = Constant::new("true");
@@ -169,6 +184,8 @@ impl Prover {
                 trues.push(s.into())
             } else if *s.name() == does_const {
                 does.push(s.into());
+            } else {
+                panic!("State contains something other than `true` and `does`");
             }
         }
         let mut context = RuleMap::new();
@@ -287,12 +304,10 @@ impl Prover {
             self.ask_goals(goals, results, renamer, theta, state);
         }
     }
-
-    pub fn prove(&self, s: Sentence, state: State) -> bool {
-        !self.ask(s, state).props.is_empty()
-    }
 }
 
+/// Unifies relations `r1` and `r2`, returning a `Substitution` mapping one into the other if such
+/// a substitution exists, otherwise returns `None`.
 fn unify(r1: Relation, r2: Relation) -> Option<Substitution> {
     let x = Function::new(r1.name, r1.args).into();
     let y = Function::new(r2.name, r2.args).into();

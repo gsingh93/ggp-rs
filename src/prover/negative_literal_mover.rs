@@ -1,3 +1,10 @@
+//! This module literals in a GDL description such that all variables in a negative literal (i.e. a
+//! `distinct` or `not` literal) have been seen in positive literals occurring before that
+//! `negative` literal. The resulting GDL should be semantically equivalent. To see why this is
+//! necessary, see section 13.6 [here](http://logic.stanford.edu/ggp/chapters/chapter_13.html). For
+//! an example test case of where this makes a difference, see the `test_beginning_distinct` test
+//! case in this file.
+
 use std::collections::HashSet;
 
 use prover::deorer;
@@ -6,6 +13,8 @@ use gdl::Clause::RuleClause;
 use gdl::Literal::{OrLit, NotLit, DistinctLit, RelLit};
 use gdl::Term::{VarTerm, FuncTerm};
 
+/// Reorders a game description such that all negative literals occur after all their variables
+/// have been seen in a positive literal
 pub fn reorder(desc: Description) -> Description {
     let desc = deorer::deor(desc);
 
@@ -183,6 +192,7 @@ mod test {
         let prover = Prover::new(desc);
         let moves =
             prover.ask(query_builder::legal_query(&Role::new("you")), State::new()).into_moves();
+        // Without the reordering, there are four legal moves, which is incorrect
         assert_eq!(moves.len(), 2);
     }
 }

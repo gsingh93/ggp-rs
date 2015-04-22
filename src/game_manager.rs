@@ -163,8 +163,10 @@ impl Game {
         }
         let new_state = self.get_next_state(&self.cur_state, moves);
         if cfg!(not(ndebug)) {
-            let old_props: Vec<_> = self.cur_state.props.difference(&new_state.props).cloned().collect();
-            let new_props: Vec<_> = new_state.props.difference(&self.cur_state.props).cloned().collect();
+            let old_props: Vec<_> =
+                self.cur_state.props.difference(&new_state.props).cloned().collect();
+            let new_props: Vec<_> =
+                new_state.props.difference(&self.cur_state.props).cloned().collect();
             debug!("Removed propositions: {:?}", old_props);
             debug!("Added propositions: {:?}", new_props);
         }
