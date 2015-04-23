@@ -101,11 +101,18 @@ impl VarRenamer {
         VarRenamer { id: 0 }
     }
 
-    fn rename(&mut self, r: &Rule) -> Rule {
+    fn rename_rule(&mut self, r: &Rule) -> Rule {
         let mut r = r.clone();
         let mut v = RenamingVisitor::new(self);
         visitor::visit_rule(&mut r, &mut v);
         r
+    }
+
+    fn rename_sentence(&mut self, s: &Sentence) -> Sentence {
+        let mut s = s.clone();
+        let mut v = RenamingVisitor::new(self);
+        visitor::visit_sentence(&mut s, &mut v);
+        s
     }
 
     fn next_var_name(&mut self) -> String {
@@ -195,7 +202,7 @@ impl Prover {
 
         let mut results = Vec::new();
         self.ask_goals(&mut goals, &mut results, &mut VarRenamer::new(), &mut Substitution::new(),
-                       &context);
+                       &context, &mut HashSet::new());
 
         let mut props = HashSet::new();
         for theta in results {
@@ -210,7 +217,8 @@ impl Prover {
     }
 
     fn ask_goals(&self, goals: &mut VecDeque<Literal>, results: &mut Vec<Substitution>,
-                 renamer: &mut VarRenamer, theta: &mut Substitution, state: &RuleMap) {
+                 renamer: &mut VarRenamer, theta: &mut Substitution, state: &RuleMap,
+                 already_asking: &mut HashSet<Relation>) {
         debug!("goals: {:?}", goals);
         let l = match goals.pop_front() {
             None => { results.push(theta.clone()); return },
@@ -219,12 +227,13 @@ impl Prover {
 
         let q = theta.substitute(&l);
         match q {
-            OrLit(or) => self.ask_or(or, goals, results, renamer, theta, state),
-            NotLit(not) => self.ask_not(not, goals, results, renamer, theta, state),
+            OrLit(or) => self.ask_or(or, goals, results, renamer, theta, state, already_asking),
+            NotLit(not) => self.ask_not(not, goals, results, renamer, theta, state, already_asking),
             DistinctLit(distinct) => self.ask_distinct(distinct, goals, results, renamer, theta,
-                                                       state),
-            PropLit(prop) => self.ask_prop(prop, goals, results, renamer, theta, state),
-            RelLit(rel) => self.ask_rel(rel, goals, results, renamer, theta, state)
+                                                       state, already_asking),
+            PropLit(prop) => self.ask_prop(prop, goals, results, renamer, theta, state,
+                                           already_asking),
+            RelLit(rel) => self.ask_rel(rel, goals, results, renamer, theta, state, already_asking)
         }
 
         goals.push_front(l);
@@ -232,13 +241,25 @@ impl Prover {
 
     fn ask_prop(&self, prop: Proposition, goals: &mut VecDeque<Literal>,
                 results: &mut Vec<Substitution>, renamer: &mut VarRenamer,
-                theta: &mut Substitution, state: &RuleMap) {
-        self.ask_rel(Relation::new(prop.name, Vec::new()), goals, results, renamer, theta, state);
+                theta: &mut Substitution, state: &RuleMap,
+                already_asking: &mut HashSet<Relation>) {
+        self.ask_rel(Relation::new(prop.name, Vec::new()), goals, results, renamer, theta, state,
+                     already_asking);
     }
 
     fn ask_rel(&self, rel: Relation, goals: &mut VecDeque<Literal>,
                results: &mut Vec<Substitution>, renamer: &mut VarRenamer,
-               theta: &mut Substitution, state: &RuleMap) {
+               theta: &mut Substitution, state: &RuleMap, already_asking: &mut HashSet<Relation>) {
+        let renamed_rel = match VarRenamer::new().rename_sentence(&rel.clone().into()) {
+            RelSentence(rel) => rel,
+            _ => panic!("Expected relation")
+        };
+
+        if already_asking.contains(&renamed_rel) {
+            return;
+        }
+        already_asking.insert(renamed_rel.clone());
+
         let mut candidates: HashSet<Rule> = HashSet::new();
 
         // Check whether the relation is already a true statement
@@ -253,7 +274,7 @@ impl Prover {
 
         debug!("{} candidates found for unification", candidates.len());
         for rule in candidates {
-            let rule = renamer.rename(&rule);
+            let rule = renamer.rename_rule(&rule);
             let rel_head = match rule.head.clone() {
                 PropSentence(p) => p.into(),
                 RelSentence(r) => r
@@ -268,40 +289,44 @@ impl Prover {
                 }
                 new_goals.append(&mut goals.clone());
                 self.ask_goals(&mut new_goals, results, renamer, &mut theta.compose(theta_prime),
-                               state);
+                               state, already_asking);
             } else {
                 debug!("Unification failure");
             }
         }
+        already_asking.remove(&renamed_rel);
     }
 
     fn ask_or(&self, or: Or, goals: &mut VecDeque<Literal>, results: &mut Vec<Substitution>,
-              renamer: &mut VarRenamer, theta: &mut Substitution, state: &RuleMap) {
+              renamer: &mut VarRenamer, theta: &mut Substitution, state: &RuleMap,
+              already_asking: &mut HashSet<Relation>) {
         for lit in or.lits.into_iter() {
             goals.push_front(lit);
-            self.ask_goals(goals, results, renamer, theta, state);
+            self.ask_goals(goals, results, renamer, theta, state, already_asking);
             goals.pop_front().unwrap();
         }
     }
 
     fn ask_not(&self, not: Not, goals: &mut VecDeque<Literal>, results: &mut Vec<Substitution>,
-               renamer: &mut VarRenamer, theta: &mut Substitution, state: &RuleMap) {
+               renamer: &mut VarRenamer, theta: &mut Substitution, state: &RuleMap,
+               already_asking: &mut HashSet<Relation>) {
         let mut not_goals = VecDeque::new();
         let mut not_results = Vec::new();
 
         not_goals.push_front(*not.lit);
-        self.ask_goals(&mut not_goals, &mut not_results, renamer, theta, state);
+        self.ask_goals(&mut not_goals, &mut not_results, renamer, theta, state, already_asking);
 
         if not_results.is_empty() {
-            self.ask_goals(goals, results, renamer, theta, state);
+            self.ask_goals(goals, results, renamer, theta, state, already_asking);
         }
     }
 
     fn ask_distinct(&self, distinct: Distinct, goals: &mut VecDeque<Literal>,
                     results: &mut Vec<Substitution>, renamer: &mut VarRenamer,
-                    theta: &mut Substitution, state: &RuleMap) {
+                    theta: &mut Substitution, state: &RuleMap,
+                    already_asking: &mut HashSet<Relation>) {
         if distinct.term1 != distinct.term2 {
-            self.ask_goals(goals, results, renamer, theta, state);
+            self.ask_goals(goals, results, renamer, theta, state, already_asking);
         }
     }
 }
@@ -591,12 +616,29 @@ mod test {
         assert_eq!(next_state, State { props: props })
     }
 
-    #[ignore]
     #[test]
     fn test_recursive1() {
         let (prover, init_state) = construct_prover("resources/nim-recursive1.gdl");
         let role = Role::new("white");
-        prover.ask(query_builder::legal_query(&role), init_state);
+
+        let mut expected_moves = HashSet::new();
+        for i in 0..2 {
+           expected_moves.insert(Move::new(
+               Function::new("reduce", vec![Constant::new("a").into(),
+                                            Constant::new(i.to_string()).into()]).into()));
+        }
+        for i in 0..5 {
+            expected_moves.insert(Move::new(
+                Function::new("reduce",
+                              vec![Constant::new("c").into(),
+                                   Constant::new(i.to_string()).into()]).into()));
+        }
+
+        let results = prover.ask(query_builder::legal_query(&role), init_state).into_moves();
+        let results_len = results.len();
+        let results_set: HashSet<Move> = results.into_iter().collect();
+        assert_eq!(results_set.len(), results_len);
+        assert_eq!(results_set, expected_moves);
     }
 
     #[ignore]
@@ -604,7 +646,25 @@ mod test {
     fn test_recursive2() {
         let (prover, init_state) = construct_prover("resources/nim-recursive2.gdl");
         let role = Role::new("white");
-        prover.ask(query_builder::legal_query(&role), init_state);
+
+        let mut expected_moves = HashSet::new();
+        for i in 0..2 {
+           expected_moves.insert(Move::new(
+               Function::new("reduce", vec![Constant::new("a").into(),
+                                            Constant::new(i.to_string()).into()]).into()));
+        }
+        for i in 0..5 {
+            expected_moves.insert(Move::new(
+                Function::new("reduce",
+                              vec![Constant::new("c").into(),
+                                   Constant::new(i.to_string()).into()]).into()));
+        }
+
+        let results = prover.ask(query_builder::legal_query(&role), init_state).into_moves();
+        let results_len = results.len();
+        let results_set: HashSet<Move> = results.into_iter().collect();
+        assert_eq!(results_set.len(), results_len);
+        assert_eq!(results_set, expected_moves);
     }
 
     mod bench {
