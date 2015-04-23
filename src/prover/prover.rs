@@ -624,5 +624,23 @@ mod test {
             b.iter(||
                    prover.ask(query_builder::legal_query(&role), init_state.clone()).into_moves());
         }
+
+        #[bench]
+        fn bench_eightpuzzle(b: &mut Bencher) {
+            let (prover, init_state) = construct_prover("resources/eightpuzzle.gdl");
+            let role = Role::new("robot");
+
+            b.iter(||
+                   prover.ask(query_builder::legal_query(&role), init_state.clone()).into_moves());
+        }
+
+        #[bench]
+        fn bench_ruledepthexponential(b: &mut Bencher) {
+            let (prover, init_state) = construct_prover("resources/ruledepthexponential.gdl");
+            let role = Role::new("robot");
+
+            b.iter(||
+                   prover.ask(query_builder::legal_query(&role), init_state.clone()).into_moves());
+        }
     }
 }
