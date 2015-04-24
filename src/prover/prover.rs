@@ -272,6 +272,7 @@ impl Prover {
             candidates.extend(rules.clone());
         }
 
+        let mut new_results = Vec::new();
         debug!("{} candidates found for unification", candidates.len());
         for rule in candidates {
             let rule = renamer.rename_rule(&rule);
@@ -284,17 +285,23 @@ impl Prover {
             if let Some(theta_prime) = unify(rel_head, rel.clone()) {
                 debug!("Unification Success");
                 let mut new_goals = VecDeque::new();
+
                 for r in rule.body.clone() {
                     new_goals.push_back(r);
                 }
-                new_goals.append(&mut goals.clone());
-                self.ask_goals(&mut new_goals, results, renamer, &mut theta.compose(theta_prime),
-                               state, already_asking);
+                self.ask_goals(&mut new_goals, &mut new_results, renamer,
+                               &mut theta.compose(theta_prime), state, already_asking);
             } else {
                 debug!("Unification failure");
             }
         }
-        already_asking.remove(&renamed_rel);
+
+        assert!(already_asking.remove(&renamed_rel));
+        for res in new_results {
+            self.ask_goals(goals, results, renamer, &mut theta.compose(res), state,
+                           already_asking);
+
+        }
     }
 
     fn ask_or(&self, or: Or, goals: &mut VecDeque<Literal>, results: &mut Vec<Substitution>,

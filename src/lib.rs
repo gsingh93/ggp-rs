@@ -38,7 +38,7 @@
 //! }
 //! ```
 
-#![feature(std_misc, plugin, collections)]
+#![feature(std_misc, plugin)]
 #![cfg_attr(test, feature(test))]
 #![plugin(regex_macros)]
 
