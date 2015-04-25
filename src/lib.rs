@@ -50,6 +50,7 @@ extern crate unicase;
 #[macro_use]
 extern crate log;
 
+mod util;
 mod game_manager;
 mod gdl;
 mod prover;
@@ -80,7 +81,7 @@ pub trait Player {
 
     fn meta_game(&self, _: &Game) {}
 
-    fn select_move(&self, game: &Game) -> Move;
+    fn select_move(&mut self, game: &Game) -> Move;
 
     fn stop(&self, _: &Game) {}
 }

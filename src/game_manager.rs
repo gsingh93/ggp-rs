@@ -1,8 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
 use Player;
+use util::{cross_product, create_does};
 use prover::{Prover, query_builder};
-use gdl::{self, Description, Sentence, Role, Move, Score, Function, Constant, Relation};
+use gdl::{self, Description, Sentence, Role, Move, Score, Function, Constant};
 use gdl::Clause::{SentenceClause, RuleClause};
 use gdl::Sentence::{RelSentence, PropSentence};
 use gdl::Term::ConstTerm;
@@ -446,29 +447,6 @@ impl RequestParser {
         }
         res.parse().unwrap()
     }
-}
-
-fn cross_product<T: Clone>(v: Vec<Vec<T>>) -> Vec<Vec<T>> {
-    fn helper<'a, T: Clone>(v: &'a [Vec<T>], res: &mut Vec<Vec<T>>, partial: &mut Vec<&'a T>) {
-        if v.len() == partial.len() {
-            res.push(partial.iter().map(|x| (**x).clone()).collect());
-        } else {
-            assert!(partial.len() < v.len());
-            for t in v[partial.len()].iter() {
-                partial.push(t);
-                helper(v, res, partial);
-                partial.pop().unwrap();
-            }
-        }
-    }
-
-    let mut res = Vec::new();
-    helper(&*v, &mut res, &mut Vec::new());
-    res
-}
-
-fn create_does(r: &Role, m: &Move) -> Sentence {
-    Relation::new("does", vec![Constant::new(r.name()).into(), m.contents.clone()]).into()
 }
 
 #[cfg(test)]

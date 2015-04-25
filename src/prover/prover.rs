@@ -1,5 +1,10 @@
 //! Contains objects for proving queries about a game description. A description of the algorithms
-//! used can be found [here](http://logic.stanford.edu/ggp/chapters/chapter_13.html)
+//! used can be found [here](http://logic.stanford.edu/ggp/chapters/chapter_13.html). The one
+//! addition in this code is the recursion checking. We check if we are asking about a relation
+//! we have previously asked about but have not received an answer for. In this case, we mark that
+//! this has happened for this relation, return, and continue proving other subgoals. Once the
+//! remaining subgoals have been proved, we return to the marked relation and attempt to prove it
+//! until no new substitutions are found.
 
 use std::collections::{HashSet, HashMap, VecDeque, BTreeMap};
 use std::collections::hash_map::Entry::{Occupied, Vacant};
@@ -270,7 +275,7 @@ impl Prover {
         self.ask_rel(Relation::new(prop.name, Vec::new()), goals, results, theta, context);
     }
 
-    fn get_relation_results(&self, rel: Relation, theta: &Substitution, candidates: HashSet<Rule>,
+    fn get_relation_results(&self, rel: Relation, theta: &Substitution, candidates: &HashSet<Rule>,
                             context: &mut RecursionContext) -> HashSet<Substitution> {
         let mut new_results = HashSet::new();
         debug!("{} candidates found for unification", candidates.len());
@@ -278,7 +283,7 @@ impl Prover {
             let candidate_str: Vec<_> = candidates.iter().map(|x| x.to_string()).collect();
             debug!("Possible candidates: {:?}", candidate_str);
         }
-        for rule in candidates {
+        for rule in candidates.iter() {
             let rule = context.renamer.rename_rule(&rule);
             let rel_head = match rule.head.clone() {
                 PropSentence(p) => p.into(),
@@ -289,10 +294,7 @@ impl Prover {
             if let Some(theta_prime) = unify(rel_head, rel.clone()) {
                 debug!("Unification Success");
                 let mut new_goals = VecDeque::new();
-
-                for r in rule.body.clone() {
-                    new_goals.push_back(r);
-                }
+                new_goals.extend(rule.body.clone());
                 self.ask_goals(&mut new_goals, &mut new_results, &mut theta.compose(theta_prime),
                                context);
                 debug!("Continuing unification loop for {}", rel);
@@ -314,8 +316,7 @@ impl Prover {
         if context.already_asking.contains(&renamed_rel) {
             debug!("Recursively called {}, backtracking", renamed_rel);
             context.called_recursively.insert(renamed_rel.clone());
-            let prev_results =
-                context.previous_results.entry(renamed_rel)
+            let prev_results = context.previous_results.entry(renamed_rel)
                 .or_insert_with(|| HashSet::new()).clone();
             for res in prev_results {
                 let theta_prime = unify(res, rel.clone()).unwrap();
@@ -337,8 +338,7 @@ impl Prover {
             candidates.extend(rules.clone());
         }
 
-        let mut new_results = self.get_relation_results(rel.clone(), theta, candidates.clone(),
-                                                        context);
+        let mut new_results = self.get_relation_results(rel.clone(), theta, &candidates, context);
         debug!("{} results from unifying {}", new_results.len(), rel);
 
         if context.called_recursively.contains(&renamed_rel) {
@@ -361,11 +361,11 @@ impl Prover {
                     context.previous_results.get_mut(&renamed_rel).unwrap()
                         .extend(sentence_results);
 
-                    new_results = self.get_relation_results(rel.clone(), theta, candidates.clone(),
+                    new_results = self.get_relation_results(rel.clone(), theta, &candidates,
                                                             context);
 
                     sentence_results = HashSet::new();
-                    for res in new_results.clone() {
+                    for res in new_results.iter() {
                         let s: Sentence = rel.clone().into();
                         let l: Literal = s.into();
                         let sentence = match res.substitute(&l) {
@@ -770,17 +770,30 @@ mod test {
 
         use self::test::Bencher;
 
+        use util::create_does;
         use super::construct_prover;
         use super::super::query_builder;
         use gdl::Role;
 
         #[bench]
-        fn bench_tictactoe7(b: &mut Bencher) {
+        fn bench_tictactoe7_legal(b: &mut Bencher) {
             let (prover, init_state) = construct_prover("resources/tictactoe7.gdl");
             let role = Role::new("white");
 
             b.iter(||
-                   prover.ask(query_builder::legal_query(&role), init_state.clone()).into_moves());
+                   prover.ask(query_builder::legal_query(&role), init_state.clone()));
+        }
+
+        #[bench]
+        fn bench_tictactoe7_next(b: &mut Bencher) {
+            let (prover, mut init_state) = construct_prover("resources/tictactoe7.gdl");
+            let role = Role::new("white");
+            let m = prover.ask(query_builder::legal_query(&role),
+                               init_state.clone()).into_moves();
+            init_state.props.insert(create_does(&role, &m[0]));
+
+            b.iter(||
+                   prover.ask(query_builder::next_query(), init_state.clone()));
         }
 
         #[bench]
@@ -789,7 +802,7 @@ mod test {
             let role = Role::new("robot");
 
             b.iter(||
-                   prover.ask(query_builder::legal_query(&role), init_state.clone()).into_moves());
+                   prover.ask(query_builder::legal_query(&role), init_state.clone()));
         }
 
         #[bench]
@@ -798,7 +811,7 @@ mod test {
             let role = Role::new("robot");
 
             b.iter(||
-                   prover.ask(query_builder::legal_query(&role), init_state.clone()).into_moves());
+                   prover.ask(query_builder::legal_query(&role), init_state.clone()));
         }
     }
 }
