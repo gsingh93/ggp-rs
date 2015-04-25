@@ -1,7 +1,9 @@
-ggp-rs [![Build Status](https://travis-ci.org/gsingh93/ggp-rs.svg?branch=master)](https://travis-ci.org/gsingh93/ggp-rs)
+ggp-rs [![Build Status](https://travis-ci.org/gsingh93/ggp-rs.svg?branch=master)](https://travis-ci.org/gsingh93/ggp-rs) [![](https://meritbadge.herokuapp.com/ggp-rs)](https://crates.io/crates/ggp-rs)
 ======
 
-`ggp-rs` is a library for creating GGP (general game playing) players in Rust that is based off of [GGP Base](https://github.com/ggp-org/ggp-base). While GGP Base allows the creation of players backed by a propositional network or a logic prover, this library currently only supports logic prover based players. Note that while this library is functional, it is still in early development. That means that the API may change, there are likely to be bugs, and there may be performance issues. Please file an [issue](https://github.com/gsingh93/ggp-rs/issues) to report a bug or request a feature. Pull requests are welcome.
+**Note**: This project currently requires using the nightly build of Rust, as the parser relies on unstable compiler features to generate the parsing code. The easiest way to maintain multiple distributions of Rust is [multirust](https://github.com/brson/multirust).
+
+`ggp-rs` is a library for creating GGP (general game playing) players in Rust that is based off of [GGP Base](https://github.com/ggp-org/ggp-base). While GGP Base allows the creation of players backed by a propositional network or a logic prover, this library currently only supports logic prover based players. Note that while this library is functional, it is still in early development. That means that the API may change, and there may be bugs and performance issues. Please file an [issue](https://github.com/gsingh93/ggp-rs/issues) to report a bug or request a feature. Pull requests are welcome.
 
 ### Installation
 
