@@ -1,3 +1,5 @@
+use std::fmt::{Display, Debug, Formatter, Error};
+
 pub use gdl_parser::{Description, Clause, Rule, Sentence, Term, Literal, Constant, Variable,
                      Function, Relation, Proposition, Not, Or, Distinct};
 pub use gdl_parser::parse;
@@ -20,7 +22,7 @@ impl Role {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash)]
 pub struct Move {
     pub contents: Term
 }
@@ -31,8 +33,14 @@ impl Move {
     }
 }
 
-impl ToString for Move {
-    fn to_string(&self) -> String {
-        self.contents.to_string()
+impl Display for Move {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        write!(f, "{}", self.contents.to_string())
+    }
+}
+
+impl Debug for Move {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        Display::fmt(self, f)
     }
 }

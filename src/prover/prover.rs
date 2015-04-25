@@ -1,7 +1,7 @@
 //! Contains objects for proving queries about a game description. A description of the algorithms
 //! used can be found [here](http://logic.stanford.edu/ggp/chapters/chapter_13.html)
 
-use std::collections::{HashSet, HashMap, VecDeque};
+use std::collections::{HashSet, HashMap, VecDeque, BTreeMap};
 use std::collections::hash_map::Entry::{Occupied, Vacant};
 
 use game_manager::State;
@@ -57,14 +57,14 @@ impl<'a> Visitor for SubstitutionVisitor<'a> {
 }
 
 /// A mapping from `Variable`s to `Term`s
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 struct Substitution {
-    mapping: HashMap<Variable, Term>
+    mapping: BTreeMap<Variable, Term>
 }
 
 impl Substitution {
     fn new() -> Substitution {
-        Substitution { mapping: HashMap::new() }
+        Substitution { mapping: BTreeMap::new() }
     }
 
     fn substitute(&self, l: &Literal) -> Literal {
@@ -116,10 +116,8 @@ impl VarRenamer {
     }
 
     fn next_var_name(&mut self) -> String {
-        let mut s = self.id.to_string();
+        let s = format!("R{}", self.id);
         self.id += 1;
-        s.insert(0, '?');
-        s.insert(1, 'R');
         s
     }
 }
@@ -142,6 +140,27 @@ impl<'a> Visitor for RenamingVisitor<'a> {
             Occupied(e) => (*e.get()).clone(),
             Vacant(e) => (*e.insert(Constant::new(self.renamer.next_var_name()))).clone()
         };
+    }
+}
+
+struct RecursionContext {
+    /// Contains all relations that have been asked about but have not received answers
+    already_asking: HashSet<Relation>,
+
+    /// Contains all relations that have asked about themselves recursively
+    called_recursively: HashSet<Relation>,
+
+    /// Contains a mapping of relations to their (possibly partial) unification results
+    previous_results: HashMap<Relation, HashSet<Relation>>,
+    state: RuleMap,
+    renamer: VarRenamer
+}
+
+impl RecursionContext {
+    fn new(state: RuleMap) -> RecursionContext {
+        RecursionContext { already_asking: HashSet::new(), called_recursively: HashSet::new(),
+                           previous_results: HashMap::new(), state: state,
+                           renamer: VarRenamer::new() }
     }
 }
 
@@ -195,14 +214,18 @@ impl Prover {
                 panic!("State contains something other than `true` and `does`");
             }
         }
-        let mut context = RuleMap::new();
-        context.insert(Constant::new("true"), trues);
-        context.insert(Constant::new("does"), does);
-        debug!("context: {:?}", context);
+        if cfg!(not(ndebug)) {
+            let state_str: Vec<_> =
+                trues.iter().chain(does.iter()).map(|x: &Rule| x.head.to_string()).collect();
+            debug!("state: {:?}", state_str);
+        }
+        let mut state_map = RuleMap::new();
+        state_map.insert(Constant::new("true"), trues);
+        state_map.insert(Constant::new("does"), does);
 
-        let mut results = Vec::new();
-        self.ask_goals(&mut goals, &mut results, &mut VarRenamer::new(), &mut Substitution::new(),
-                       &context, &mut HashSet::new());
+        let mut context = RecursionContext::new(state_map);
+        let mut results = HashSet::new();
+        self.ask_goals(&mut goals, &mut results, &mut Substitution::new(), &mut context);
 
         let mut props = HashSet::new();
         for theta in results {
@@ -216,54 +239,96 @@ impl Prover {
         QueryResult { props: props }
     }
 
-    fn ask_goals(&self, goals: &mut VecDeque<Literal>, results: &mut Vec<Substitution>,
-                 renamer: &mut VarRenamer, theta: &mut Substitution, state: &RuleMap,
-                 already_asking: &mut HashSet<Relation>) {
-        debug!("goals: {:?}", goals);
+    fn ask_goals(&self, goals: &mut VecDeque<Literal>, results: &mut HashSet<Substitution>,
+                 theta: &mut Substitution, context: &mut RecursionContext) {
+        if cfg!(not(ndebug)) {
+            let goal_str: Vec<String> = goals.iter().map(|x| x.to_string()).collect();
+            debug!("goals: {:?}", goal_str);
+        }
+
         let l = match goals.pop_front() {
-            None => { results.push(theta.clone()); return },
+            None => { results.insert(theta.clone()); return },
             Some(l) => l
         };
 
         let q = theta.substitute(&l);
+        debug!("Goal query: {} (original: {})", q, l);
         match q {
-            OrLit(or) => self.ask_or(or, goals, results, renamer, theta, state, already_asking),
-            NotLit(not) => self.ask_not(not, goals, results, renamer, theta, state, already_asking),
-            DistinctLit(distinct) => self.ask_distinct(distinct, goals, results, renamer, theta,
-                                                       state, already_asking),
-            PropLit(prop) => self.ask_prop(prop, goals, results, renamer, theta, state,
-                                           already_asking),
-            RelLit(rel) => self.ask_rel(rel, goals, results, renamer, theta, state, already_asking)
+            OrLit(or) => self.ask_or(or, goals, results, theta, context),
+            NotLit(not) => self.ask_not(not, goals, results, theta, context),
+            DistinctLit(distinct) => self.ask_distinct(distinct, goals, results, theta, context),
+            PropLit(prop) => self.ask_prop(prop, goals, results, theta, context),
+            RelLit(rel) => self.ask_rel(rel, goals, results, theta, context)
         }
 
         goals.push_front(l);
     }
 
     fn ask_prop(&self, prop: Proposition, goals: &mut VecDeque<Literal>,
-                results: &mut Vec<Substitution>, renamer: &mut VarRenamer,
-                theta: &mut Substitution, state: &RuleMap,
-                already_asking: &mut HashSet<Relation>) {
-        self.ask_rel(Relation::new(prop.name, Vec::new()), goals, results, renamer, theta, state,
-                     already_asking);
+                results: &mut HashSet<Substitution>, theta: &mut Substitution,
+                context: &mut RecursionContext) {
+        self.ask_rel(Relation::new(prop.name, Vec::new()), goals, results, theta, context);
+    }
+
+    fn get_relation_results(&self, rel: Relation, theta: &Substitution, candidates: HashSet<Rule>,
+                            context: &mut RecursionContext) -> HashSet<Substitution> {
+        let mut new_results = HashSet::new();
+        debug!("{} candidates found for unification", candidates.len());
+        if cfg!(not(ndebug)) {
+            let candidate_str: Vec<_> = candidates.iter().map(|x| x.to_string()).collect();
+            debug!("Possible candidates: {:?}", candidate_str);
+        }
+        for rule in candidates {
+            let rule = context.renamer.rename_rule(&rule);
+            let rel_head = match rule.head.clone() {
+                PropSentence(p) => p.into(),
+                RelSentence(r) => r
+            };
+
+            debug!("Unifying {} and {}", rel_head, rel);
+            if let Some(theta_prime) = unify(rel_head, rel.clone()) {
+                debug!("Unification Success");
+                let mut new_goals = VecDeque::new();
+
+                for r in rule.body.clone() {
+                    new_goals.push_back(r);
+                }
+                self.ask_goals(&mut new_goals, &mut new_results, &mut theta.compose(theta_prime),
+                               context);
+                debug!("Continuing unification loop for {}", rel);
+            } else {
+                debug!("Unification failure");
+            }
+        }
+        new_results
     }
 
     fn ask_rel(&self, rel: Relation, goals: &mut VecDeque<Literal>,
-               results: &mut Vec<Substitution>, renamer: &mut VarRenamer,
-               theta: &mut Substitution, state: &RuleMap, already_asking: &mut HashSet<Relation>) {
+               results: &mut HashSet<Substitution>, theta: &mut Substitution,
+               context: &mut RecursionContext) {
         let renamed_rel = match VarRenamer::new().rename_sentence(&rel.clone().into()) {
             RelSentence(rel) => rel,
             _ => panic!("Expected relation")
         };
 
-        if already_asking.contains(&renamed_rel) {
+        if context.already_asking.contains(&renamed_rel) {
+            debug!("Recursively called {}, backtracking", renamed_rel);
+            context.called_recursively.insert(renamed_rel.clone());
+            let prev_results =
+                context.previous_results.entry(renamed_rel)
+                .or_insert_with(|| HashSet::new()).clone();
+            for res in prev_results {
+                let theta_prime = unify(res, rel.clone()).unwrap();
+                self.ask_goals(goals, results, &mut theta.compose(theta_prime), context);
+            }
             return;
         }
-        already_asking.insert(renamed_rel.clone());
+        context.already_asking.insert(renamed_rel.clone());
 
         let mut candidates: HashSet<Rule> = HashSet::new();
 
         // Check whether the relation is already a true statement
-        if let Some(rules) = state.get(&rel.name) {
+        if let Some(rules) = context.state.get(&rel.name) {
             candidates.extend(rules.clone());
         }
 
@@ -272,68 +337,81 @@ impl Prover {
             candidates.extend(rules.clone());
         }
 
-        let mut new_results = Vec::new();
-        debug!("{} candidates found for unification", candidates.len());
-        for rule in candidates {
-            let rule = renamer.rename_rule(&rule);
-            let rel_head = match rule.head.clone() {
-                PropSentence(p) => p.into(),
-                RelSentence(r) => r
-            };
+        let mut new_results = self.get_relation_results(rel.clone(), theta, candidates.clone(),
+                                                        context);
+        debug!("{} results from unifying {}", new_results.len(), rel);
 
-            debug!("Unifying {:?} and {:?}", rel_head, rel);
-            if let Some(theta_prime) = unify(rel_head, rel.clone()) {
-                debug!("Unification Success");
-                let mut new_goals = VecDeque::new();
-
-                for r in rule.body.clone() {
-                    new_goals.push_back(r);
-                }
-                self.ask_goals(&mut new_goals, &mut new_results, renamer,
-                               &mut theta.compose(theta_prime), state, already_asking);
-            } else {
-                debug!("Unification failure");
+        if context.called_recursively.contains(&renamed_rel) {
+            debug!("Rehandling {} due to recursive call", renamed_rel);
+            let mut sentence_results = HashSet::new();
+            for res in new_results.clone() {
+                let s: Sentence = rel.clone().into();
+                let l: Literal = s.into();
+                let sentence = match res.substitute(&l) {
+                    PropLit(prop) => prop.into(),
+                    RelLit(rel) => rel,
+                    _ => panic!("Expected sentence")
+                };
+                sentence_results.insert(sentence);
             }
+
+            while sentence_results.len() >
+                context.previous_results.get_mut(&renamed_rel).unwrap().len() {
+                    assert!(context.called_recursively.remove(&renamed_rel));
+                    context.previous_results.get_mut(&renamed_rel).unwrap()
+                        .extend(sentence_results);
+
+                    new_results = self.get_relation_results(rel.clone(), theta, candidates.clone(),
+                                                            context);
+
+                    sentence_results = HashSet::new();
+                    for res in new_results.clone() {
+                        let s: Sentence = rel.clone().into();
+                        let l: Literal = s.into();
+                        let sentence = match res.substitute(&l) {
+                            PropLit(prop) => prop.into(),
+                            RelLit(rel) => rel,
+                            _ => panic!("Expected sentence")
+                        };
+                        sentence_results.insert(sentence);
+                    }
+                }
+            assert!(context.called_recursively.remove(&renamed_rel));
         }
 
-        assert!(already_asking.remove(&renamed_rel));
+        assert!(context.already_asking.remove(&renamed_rel));
         for res in new_results {
-            self.ask_goals(goals, results, renamer, &mut theta.compose(res), state,
-                           already_asking);
-
+            self.ask_goals(goals, results, &mut theta.compose(res), context);
         }
     }
 
-    fn ask_or(&self, or: Or, goals: &mut VecDeque<Literal>, results: &mut Vec<Substitution>,
-              renamer: &mut VarRenamer, theta: &mut Substitution, state: &RuleMap,
-              already_asking: &mut HashSet<Relation>) {
+    fn ask_or(&self, or: Or, goals: &mut VecDeque<Literal>, results: &mut HashSet<Substitution>,
+              theta: &mut Substitution, context: &mut RecursionContext) {
         for lit in or.lits.into_iter() {
             goals.push_front(lit);
-            self.ask_goals(goals, results, renamer, theta, state, already_asking);
+            self.ask_goals(goals, results, theta, context);
             goals.pop_front().unwrap();
         }
     }
 
-    fn ask_not(&self, not: Not, goals: &mut VecDeque<Literal>, results: &mut Vec<Substitution>,
-               renamer: &mut VarRenamer, theta: &mut Substitution, state: &RuleMap,
-               already_asking: &mut HashSet<Relation>) {
+    fn ask_not(&self, not: Not, goals: &mut VecDeque<Literal>, results: &mut HashSet<Substitution>,
+               theta: &mut Substitution, context: &mut RecursionContext) {
         let mut not_goals = VecDeque::new();
-        let mut not_results = Vec::new();
+        let mut not_results = HashSet::new();
 
         not_goals.push_front(*not.lit);
-        self.ask_goals(&mut not_goals, &mut not_results, renamer, theta, state, already_asking);
+        self.ask_goals(&mut not_goals, &mut not_results, theta, context);
 
         if not_results.is_empty() {
-            self.ask_goals(goals, results, renamer, theta, state, already_asking);
+            self.ask_goals(goals, results, theta, context);
         }
     }
 
     fn ask_distinct(&self, distinct: Distinct, goals: &mut VecDeque<Literal>,
-                    results: &mut Vec<Substitution>, renamer: &mut VarRenamer,
-                    theta: &mut Substitution, state: &RuleMap,
-                    already_asking: &mut HashSet<Relation>) {
+                    results: &mut HashSet<Substitution>, theta: &mut Substitution,
+                    context: &mut RecursionContext) {
         if distinct.term1 != distinct.term2 {
-            self.ask_goals(goals, results, renamer, theta, state, already_asking);
+            self.ask_goals(goals, results, theta, context);
         }
     }
 }
@@ -456,7 +534,7 @@ pub mod query_builder {
 
     pub fn goal_query(role: &Role) -> Sentence {
         Relation::new("goal", vec![Constant::new(role.name()).into(),
-                                               Variable::new("s").into()]).into()
+                                   Variable::new("s").into()]).into()
     }
 
     pub fn init_query() -> Sentence {
@@ -466,7 +544,7 @@ pub mod query_builder {
 
 #[cfg(test)]
 mod test {
-    use std::collections::{HashMap, HashSet};
+    use std::collections::{HashSet, BTreeMap};
     use std::fs::File;
     use std::io::Read;
 
@@ -505,7 +583,7 @@ mod test {
         let b = to_relation(gdl::parse("(legal ?p (reduce ?x ?n))"));
         let c = to_relation(gdl::parse("(reduce ?x ?n)"));
 
-        let mut map = HashMap::new();
+        let mut map = BTreeMap::new();
         map.insert(Variable::new("p"), Constant::new("white").into());
         map.insert(Variable::new("l"), Function::new(c.name, c.args).into());
         let theta = Substitution { mapping: map };
@@ -517,7 +595,7 @@ mod test {
         let a = to_relation(gdl::parse("(legal ?p ?m)")).into();
         let b = to_relation(gdl::parse("(legal white (reduce a 1))")).into();
 
-        let mut mapping = HashMap::new();
+        let mut mapping = BTreeMap::new();
         mapping.insert(Variable::new("p"), Constant::new("white").into());
         mapping.insert(Variable::new("m"),
                        Function::new("reduce",
@@ -648,7 +726,6 @@ mod test {
         assert_eq!(results_set, expected_moves);
     }
 
-    #[ignore]
     #[test]
     fn test_recursive2() {
         let (prover, init_state) = construct_prover("resources/nim-recursive2.gdl");
@@ -667,6 +744,20 @@ mod test {
                                    Constant::new(i.to_string()).into()]).into()));
         }
 
+        let results = prover.ask(query_builder::legal_query(&role), init_state).into_moves();
+        let results_len = results.len();
+        let results_set: HashSet<Move> = results.into_iter().collect();
+        assert_eq!(results_set.len(), results_len);
+        assert_eq!(results_set, expected_moves);
+    }
+
+    #[test]
+    fn test_recursive() {
+        let (prover, init_state) = construct_prover("resources/recursive.gdl");
+        let role = Role::new("you");
+
+        let mut expected_moves = HashSet::new();
+        expected_moves.insert(Move::new(Constant::new("proceed").into()));
         let results = prover.ask(query_builder::legal_query(&role), init_state).into_moves();
         let results_len = results.len();
         let results_set: HashSet<Move> = results.into_iter().collect();
