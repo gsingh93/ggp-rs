@@ -421,24 +421,24 @@ impl Prover {
 fn unify(r1: Relation, r2: Relation) -> Option<Substitution> {
     let x = Function::new(r1.name, r1.args).into();
     let y = Function::new(r2.name, r2.args).into();
-    unify_term(x, y, Substitution::new())
+    unify_term(&x, &y, Substitution::new())
 }
 
-fn unify_term(x: Term, y: Term, theta: Substitution) -> Option<Substitution> {
+fn unify_term(x: &Term, y: &Term, theta: Substitution) -> Option<Substitution> {
     if x == y {
         return Some(theta)
     }
 
-    match (x.clone(), y.clone()) {
-        (VarTerm(v), _) => unify_variable(v, y, theta),
-        (_, VarTerm(v)) => unify_variable(v, x, theta),
-        (ConstTerm(_), ConstTerm(_)) => None,
-        (FuncTerm(f1), FuncTerm(f2)) => {
-            match unify_term(f1.name.clone().into(), f2.name.clone().into(), theta) {
+    match (x, y) {
+        (&VarTerm(ref v), _) => unify_variable(v, y, theta),
+        (_, &VarTerm(ref v)) => unify_variable(v, x, theta),
+        (&ConstTerm(_), &ConstTerm(_)) => None,
+        (&FuncTerm(ref f1), &FuncTerm(ref f2)) => {
+            match unify_term(&f1.name.clone().into(), &f2.name.clone().into(), theta) {
                 Some(theta) => {
                     assert_eq!(f1.args.len(), f2.args.len());
                     let mut theta = theta;
-                    for (arg1, arg2) in f1.args.into_iter().zip(f2.args.into_iter()) {
+                    for (arg1, arg2) in f1.args.iter().zip(f2.args.iter()) {
                         match unify_term(arg1, arg2, theta) {
                             Some(theta_prime) => theta = theta_prime,
                             None => return None
@@ -453,18 +453,18 @@ fn unify_term(x: Term, y: Term, theta: Substitution) -> Option<Substitution> {
     }
 }
 
-fn unify_variable(x: Variable, y: Term, mut theta: Substitution) -> Option<Substitution> {
-    if let Some(t) = theta.get(&x).cloned() {
+fn unify_variable(x: &Variable, y: &Term, mut theta: Substitution) -> Option<Substitution> {
+    if let Some(ref t) = theta.get(&x).cloned() {
         return unify_term(t, y, theta);
     }
-    if let VarTerm(v) = y.clone() {
-        if let Some(t) = theta.get(&v).cloned() {
-            return unify_term(x.into(), t, theta)
+    if let &VarTerm(ref v) = y {
+        if let Some(ref t) = theta.get(&v).cloned() {
+            return unify_term(&x.clone().into(), t, theta)
         }
     }
 
     // Neither x nor y were found in theta
-    theta.insert(x, y);
+    theta.insert(x.clone(), y.clone());
     Some(theta)
 }
 
