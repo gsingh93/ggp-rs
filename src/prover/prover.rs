@@ -11,6 +11,7 @@ use std::collections::hash_map::Entry::{Occupied, Vacant};
 
 use game_manager::State;
 use prover::negative_literal_mover;
+use util::literal_into_relation;
 
 use gdl::{Description, Sentence, Proposition, Relation, Move, Score, Literal, Or, Not, Distinct,
           Variable, Constant, Term, Function, Rule};
@@ -148,6 +149,39 @@ impl<'a> Visitor for RenamingVisitor<'a> {
     }
 }
 
+struct Cache {
+    cache: HashMap<Relation, HashSet<Relation>>
+}
+
+impl Cache {
+    fn new() -> Cache {
+        Cache { cache: HashMap::new() }
+    }
+    fn insert(&mut self, rel: &Relation, renamed_rel: Relation, results: &HashSet<Substitution>) {
+        // We store relations instead of substitutions so that if the same sentence is queried
+        // with different variables, we can extract a new substitution that uses the correct
+        // variables.
+        let mut sentences = HashSet::new();
+        for res in results.iter() {
+            sentences.insert(literal_into_relation(res.substitute(&rel.clone().into())));
+        }
+        self.cache.insert(renamed_rel, sentences);
+    }
+
+    fn get(&self, rel: &Relation, renamed_rel: &Relation) -> Option<HashSet<Substitution>> {
+        match self.cache.get(renamed_rel) {
+            Some(sentences) => {
+                let mut results = HashSet::new();
+                for sentence in sentences {
+                    results.insert(unify(sentence.clone(), rel.clone()).unwrap());
+                }
+                Some(results)
+            }
+            None => None
+        }
+    }
+}
+
 struct RecursionContext {
     /// Contains all relations that have been asked about but have not received answers
     already_asking: HashSet<Relation>,
@@ -158,14 +192,15 @@ struct RecursionContext {
     /// Contains a mapping of relations to their (possibly partial) unification results
     previous_results: HashMap<Relation, HashSet<Relation>>,
     state: RuleMap,
-    renamer: VarRenamer
+    renamer: VarRenamer,
+    cache: Cache
 }
 
 impl RecursionContext {
     fn new(state: RuleMap) -> RecursionContext {
         RecursionContext { already_asking: HashSet::new(), called_recursively: HashSet::new(),
                            previous_results: HashMap::new(), state: state,
-                           renamer: VarRenamer::new() }
+                           renamer: VarRenamer::new(), cache: Cache::new() }
     }
 }
 
@@ -313,50 +348,53 @@ impl Prover {
             _ => panic!("Expected relation")
         };
 
-        if context.already_asking.contains(&renamed_rel) {
-            debug!("Recursively called {}, backtracking", renamed_rel);
-            context.called_recursively.insert(renamed_rel.clone());
-            let prev_results = context.previous_results.entry(renamed_rel)
-                .or_insert_with(|| HashSet::new()).clone();
-            for res in prev_results {
-                let theta_prime = unify(res, rel.clone()).unwrap();
-                self.ask_goals(goals, results, &mut theta.compose(theta_prime), context);
+        let cache_query = context.cache.get(&rel, &renamed_rel);
+        let sentences = if let None = cache_query {
+            if context.already_asking.contains(&renamed_rel) {
+                debug!("Recursively called {}, backtracking", renamed_rel);
+                context.called_recursively.insert(renamed_rel.clone());
+                let prev_results = context.previous_results.entry(renamed_rel)
+                    .or_insert_with(|| HashSet::new()).clone();
+                for res in prev_results {
+                    let theta_prime = unify(res, rel.clone()).unwrap();
+                    self.ask_goals(goals, results, &mut theta.compose(theta_prime), context);
+                }
+                return;
             }
-            return;
-        }
-        context.already_asking.insert(renamed_rel.clone());
+            context.already_asking.insert(renamed_rel.clone());
 
-        let mut candidates: HashSet<Rule> = HashSet::new();
+            let mut candidates: HashSet<Rule> = HashSet::new();
 
-        // Check whether the relation is already a true statement
-        if let Some(rules) = context.state.get(&rel.name) {
-            candidates.extend(rules.clone());
-        }
-
-        // Get all corresponding rules from the game description
-        if let Some(rules) = self.rule_map.get(&rel.name) {
-            candidates.extend(rules.clone());
-        }
-
-        let mut new_results = self.get_relation_results(rel.clone(), theta, &candidates, context);
-        debug!("{} results from unifying {}", new_results.len(), rel);
-
-        if context.called_recursively.contains(&renamed_rel) {
-            debug!("Rehandling {} due to recursive call", renamed_rel);
-            let mut sentence_results = HashSet::new();
-            for res in new_results.clone() {
-                let s: Sentence = rel.clone().into();
-                let l: Literal = s.into();
-                let sentence = match res.substitute(&l) {
-                    PropLit(prop) => prop.into(),
-                    RelLit(rel) => rel,
-                    _ => panic!("Expected sentence")
-                };
-                sentence_results.insert(sentence);
+            // Check whether the relation is already a true statement
+            if let Some(rules) = context.state.get(&rel.name) {
+                candidates.extend(rules.clone());
             }
 
-            while sentence_results.len() >
-                context.previous_results.get_mut(&renamed_rel).unwrap().len() {
+            // Get all corresponding rules from the game description
+            if let Some(rules) = self.rule_map.get(&rel.name) {
+                candidates.extend(rules.clone());
+            }
+
+            let mut new_results = self.get_relation_results(rel.clone(), theta, &candidates, context);
+            debug!("{} results from unifying {}", new_results.len(), rel);
+
+            if context.called_recursively.contains(&renamed_rel) {
+                debug!("Rehandling {} due to recursive call", renamed_rel);
+                let mut sentence_results = HashSet::new();
+                for res in new_results.clone() {
+                    let s: Sentence = rel.clone().into();
+                    let l: Literal = s.into();
+                    let sentence = match res.substitute(&l) {
+                        PropLit(prop) => prop.into(),
+                        RelLit(rel) => rel,
+                        _ => panic!("Expected sentence")
+                    };
+                    sentence_results.insert(sentence);
+                }
+
+                while sentence_results.len() >
+                    context.previous_results.get_mut(&renamed_rel).unwrap().len() {
+
                     assert!(context.called_recursively.remove(&renamed_rel));
                     context.previous_results.get_mut(&renamed_rel).unwrap()
                         .extend(sentence_results);
@@ -376,11 +414,19 @@ impl Prover {
                         sentence_results.insert(sentence);
                     }
                 }
-            assert!(context.called_recursively.remove(&renamed_rel));
-        }
+                assert!(context.called_recursively.remove(&renamed_rel));
+                assert!(context.previous_results.remove(&renamed_rel).is_some());
+            }
+            assert!(context.already_asking.remove(&renamed_rel));
+            if context.called_recursively.is_empty() {
+                context.cache.insert(&rel, renamed_rel.clone(), &new_results);
+            }
+            new_results
+        } else {
+            cache_query.unwrap()
+        };
 
-        assert!(context.already_asking.remove(&renamed_rel));
-        for res in new_results {
+        for res in sentences {
             self.ask_goals(goals, results, &mut theta.compose(res), context);
         }
     }
