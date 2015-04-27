@@ -6,148 +6,21 @@
 //! remaining subgoals have been proved, we return to the marked relation and attempt to prove it
 //! until no new substitutions are found.
 
-use std::collections::{HashSet, HashMap, VecDeque, BTreeMap};
-use std::collections::hash_map::Entry::{Occupied, Vacant};
+use std::collections::{HashSet, HashMap, VecDeque};
 
 use game_manager::State;
 use prover::negative_literal_mover;
+use prover::unification::unify;
+use prover::substitution::Substitution;
+use prover::renamer::VarRenamer;
 use util::literal_into_relation;
 
 use gdl::{Description, Sentence, Proposition, Relation, Move, Score, Literal, Or, Not, Distinct,
-          Variable, Constant, Term, Function, Rule};
+          Constant, Rule};
 use gdl::Clause::{SentenceClause, RuleClause};
 use gdl::Literal::{OrLit, NotLit, DistinctLit, PropLit, RelLit};
 use gdl::Sentence::{PropSentence, RelSentence};
-use gdl::Term::{VarTerm, ConstTerm, FuncTerm};
-
-use gdl_parser::visitor::{self, Visitor};
-
-/// A visitor that applies the substitution `theta` to all variables in a literal
-struct SubstitutionVisitor<'a> {
-    theta: &'a Substitution
-}
-
-impl<'a> SubstitutionVisitor<'a> {
-    fn visit_function(&mut self, func: &mut Function) {
-        for arg in func.args.iter_mut() {
-            if let VarTerm(v) = (*arg).clone() {
-                if let Some(t) = self.theta.get(&v) {
-                    *arg = (*t).clone()
-                }
-            }
-        }
-    }
-}
-
-impl<'a> Visitor for SubstitutionVisitor<'a> {
-    fn visit_term(&mut self, term: &mut Term) {
-        let mut t2 = Constant::new("").into();
-        let mut should_replace = false;
-        match term {
-            &mut VarTerm(ref v) => {
-                if let Some(mut t) = self.theta.get(&v).cloned() {
-                    should_replace = true;
-                    while t2 != t {
-                        t2 = t.clone();
-                        self.visit_term(&mut t);
-                    }
-                }
-            },
-            &mut FuncTerm(ref mut f) => { self.visit_function(f); return },
-            &mut ConstTerm(_) => return,
-        }
-        if should_replace {
-            *term = t2;
-        }
-    }
-}
-
-/// A mapping from `Variable`s to `Term`s
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
-struct Substitution {
-    mapping: BTreeMap<Variable, Term>
-}
-
-impl Substitution {
-    fn new() -> Substitution {
-        Substitution { mapping: BTreeMap::new() }
-    }
-
-    fn substitute(&self, l: &Literal) -> Literal {
-        let mut l = l.clone();
-        let mut v = SubstitutionVisitor { theta: self };
-        visitor::visit_literal(&mut l, &mut v);
-        l
-    }
-
-    fn compose(&self, theta: Substitution) -> Substitution {
-        let mut t = self.clone();
-        for (k, v) in theta.mapping {
-            t.insert(k, v);
-        }
-        t
-    }
-
-    fn insert(&mut self, v: Variable, t: Term) {
-        self.mapping.insert(v, t);
-    }
-
-    fn get(&self, v: &Variable) -> Option<&Term> {
-        self.mapping.get(v)
-    }
-}
-
-/// Generates new variable names of the form `?R0`, `?R1`, etc.
-struct VarRenamer {
-    id: u32
-}
-
-impl VarRenamer {
-    fn new() -> VarRenamer {
-        VarRenamer { id: 0 }
-    }
-
-    fn rename_rule(&mut self, r: &Rule) -> Rule {
-        let mut r = r.clone();
-        let mut v = RenamingVisitor::new(self);
-        visitor::visit_rule(&mut r, &mut v);
-        r
-    }
-
-    fn rename_sentence(&mut self, s: &Sentence) -> Sentence {
-        let mut s = s.clone();
-        let mut v = RenamingVisitor::new(self);
-        visitor::visit_sentence(&mut s, &mut v);
-        s
-    }
-
-    fn next_var_name(&mut self) -> String {
-        let s = format!("R{}", self.id);
-        self.id += 1;
-        s
-    }
-}
-
-struct RenamingVisitor<'a> {
-    renamer: &'a mut VarRenamer,
-    mapping: HashMap<Constant, Constant>
-}
-
-impl<'a> RenamingVisitor<'a> {
-    fn new(renamer: &'a mut VarRenamer) -> RenamingVisitor {
-        RenamingVisitor { renamer: renamer, mapping: HashMap::new() }
-    }
-}
-
-impl<'a> Visitor for RenamingVisitor<'a> {
-    fn visit_variable(&mut self, var: &mut Variable) {
-        let entry = self.mapping.entry(var.name.clone());
-        var.name = match entry {
-            Occupied(e) => (*e.get()).clone(),
-            Vacant(e) => (*e.insert(Constant::new(self.renamer.next_var_name()))).clone()
-        };
-    }
-}
+use gdl::Term::ConstTerm;
 
 struct Cache {
     cache: HashMap<Relation, HashSet<Relation>>
@@ -157,11 +30,12 @@ impl Cache {
     fn new() -> Cache {
         Cache { cache: HashMap::new() }
     }
+
     fn insert(&mut self, rel: &Relation, renamed_rel: Relation, results: &HashSet<Substitution>) {
         // We store relations instead of substitutions so that if the same sentence is queried
         // with different variables, we can extract a new substitution that uses the correct
         // variables.
-        let mut sentences = HashSet::new();
+        let mut sentences = HashSet::with_capacity(results.len());
         for res in results.iter() {
             sentences.insert(literal_into_relation(res.substitute(&rel.clone().into())));
         }
@@ -171,9 +45,9 @@ impl Cache {
     fn get(&self, rel: &Relation, renamed_rel: &Relation) -> Option<HashSet<Substitution>> {
         match self.cache.get(renamed_rel) {
             Some(sentences) => {
-                let mut results = HashSet::new();
-                for sentence in sentences {
-                    results.insert(unify(sentence.clone(), rel.clone()).unwrap());
+                let mut results = HashSet::with_capacity(sentences.len());
+                for sentence in sentences.iter().cloned() {
+                    results.insert(unify(sentence, rel.clone()).unwrap());
                 }
                 Some(results)
             }
@@ -215,7 +89,7 @@ impl Prover {
         let desc = negative_literal_mover::reorder(desc);
 
         // Convert the game description into a mapping between rule heads and rules
-        let mut rule_map = HashMap::new();
+        let mut rule_map = HashMap::with_capacity(desc.clauses.len());
         for clause in desc.clauses {
             let (entry, r) = match clause {
                 RuleClause(r) => (rule_map.entry(r.head.name().clone()), r),
@@ -267,7 +141,7 @@ impl Prover {
         let mut results = HashSet::new();
         self.ask_goals(&mut goals, &mut results, &mut Substitution::new(), &mut context);
 
-        let mut props = HashSet::new();
+        let mut props = HashSet::with_capacity(results.len());
         for theta in results {
             let s = match theta.substitute(&query) {
                 PropLit(prop) => PropSentence(prop),
@@ -307,7 +181,91 @@ impl Prover {
     fn ask_prop(&self, prop: Proposition, goals: &mut VecDeque<Literal>,
                 results: &mut HashSet<Substitution>, theta: &mut Substitution,
                 context: &mut RecursionContext) {
-        self.ask_rel(Relation::new(prop.name, Vec::new()), goals, results, theta, context);
+        self.ask_rel(prop.into(), goals, results, theta, context);
+    }
+
+    fn ask_rel(&self, rel: Relation, goals: &mut VecDeque<Literal>,
+               results: &mut HashSet<Substitution>, theta: &mut Substitution,
+               context: &mut RecursionContext) {
+        let renamed_rel = match VarRenamer::new().rename_sentence(&rel.clone().into()) {
+            RelSentence(rel) => rel,
+            _ => panic!("Expected relation")
+        };
+
+
+        let sentences = if let Some(sentences) = context.cache.get(&rel, &renamed_rel) {
+            sentences
+        } else {
+            if context.already_asking.contains(&renamed_rel) {
+                debug!("Recursively called {}, backtracking", renamed_rel);
+                context.called_recursively.insert(renamed_rel.clone());
+                let prev_results = context.previous_results.entry(renamed_rel)
+                    .or_insert_with(|| HashSet::new()).clone();
+                for res in prev_results {
+                    let theta_prime = unify(res, rel.clone()).unwrap();
+                    self.ask_goals(goals, results, &mut theta.compose(theta_prime), context);
+                }
+                return;
+            }
+            context.already_asking.insert(renamed_rel.clone());
+
+            let mut candidates: HashSet<Rule> = HashSet::new();
+
+            // Check whether the relation is already a true statement
+            if let Some(rules) = context.state.get(&rel.name) {
+                candidates.extend(rules.clone());
+            }
+
+            // Get all corresponding rules from the game description
+            if let Some(rules) = self.rule_map.get(&rel.name) {
+                candidates.extend(rules.clone());
+            }
+
+            let mut new_results = self.get_relation_results(rel.clone(), theta, &candidates,
+                                                            context);
+            debug!("{} results from unifying {}", new_results.len(), rel);
+
+            if context.called_recursively.contains(&renamed_rel) {
+                debug!("Rehandling {} due to recursive call", renamed_rel);
+                let mut sentence_results = HashSet::with_capacity(new_results.len());
+                for res in new_results.clone() {
+                    let s: Sentence = rel.clone().into();
+                    let l: Literal = s.into();
+                    let sentence = literal_into_relation(res.substitute(&l));
+                    sentence_results.insert(sentence);
+                }
+
+                while sentence_results.len() >
+                    context.previous_results.get_mut(&renamed_rel).unwrap().len() {
+
+                    assert!(context.called_recursively.remove(&renamed_rel));
+                    context.previous_results.get_mut(&renamed_rel).unwrap()
+                        .extend(sentence_results);
+
+                    new_results = self.get_relation_results(rel.clone(), theta, &candidates,
+                                                            context);
+
+                    sentence_results = HashSet::with_capacity(new_results.len());
+                    for res in new_results.iter() {
+                        let s: Sentence = rel.clone().into();
+                        let l: Literal = s.into();
+                        let sentence = literal_into_relation(res.substitute(&l));
+                        sentence_results.insert(sentence);
+                    }
+                }
+                assert!(context.called_recursively.remove(&renamed_rel));
+                assert!(context.previous_results.remove(&renamed_rel).is_some());
+            }
+            assert!(context.already_asking.remove(&renamed_rel));
+            if context.called_recursively.is_empty() {
+                context.cache.insert(&rel, renamed_rel.clone(), &new_results);
+            }
+            new_results
+        };
+
+        for res in sentences {
+            self.ask_goals(goals, results, &mut theta.compose(res), context);
+        }
     }
 
     fn get_relation_results(&self, rel: Relation, theta: &Substitution, candidates: &HashSet<Rule>,
@@ -338,97 +296,6 @@ impl Prover {
             }
         }
         new_results
-    }
-
-    fn ask_rel(&self, rel: Relation, goals: &mut VecDeque<Literal>,
-               results: &mut HashSet<Substitution>, theta: &mut Substitution,
-               context: &mut RecursionContext) {
-        let renamed_rel = match VarRenamer::new().rename_sentence(&rel.clone().into()) {
-            RelSentence(rel) => rel,
-            _ => panic!("Expected relation")
-        };
-
-        let cache_query = context.cache.get(&rel, &renamed_rel);
-        let sentences = if let None = cache_query {
-            if context.already_asking.contains(&renamed_rel) {
-                debug!("Recursively called {}, backtracking", renamed_rel);
-                context.called_recursively.insert(renamed_rel.clone());
-                let prev_results = context.previous_results.entry(renamed_rel)
-                    .or_insert_with(|| HashSet::new()).clone();
-                for res in prev_results {
-                    let theta_prime = unify(res, rel.clone()).unwrap();
-                    self.ask_goals(goals, results, &mut theta.compose(theta_prime), context);
-                }
-                return;
-            }
-            context.already_asking.insert(renamed_rel.clone());
-
-            let mut candidates: HashSet<Rule> = HashSet::new();
-
-            // Check whether the relation is already a true statement
-            if let Some(rules) = context.state.get(&rel.name) {
-                candidates.extend(rules.clone());
-            }
-
-            // Get all corresponding rules from the game description
-            if let Some(rules) = self.rule_map.get(&rel.name) {
-                candidates.extend(rules.clone());
-            }
-
-            let mut new_results = self.get_relation_results(rel.clone(), theta, &candidates, context);
-            debug!("{} results from unifying {}", new_results.len(), rel);
-
-            if context.called_recursively.contains(&renamed_rel) {
-                debug!("Rehandling {} due to recursive call", renamed_rel);
-                let mut sentence_results = HashSet::new();
-                for res in new_results.clone() {
-                    let s: Sentence = rel.clone().into();
-                    let l: Literal = s.into();
-                    let sentence = match res.substitute(&l) {
-                        PropLit(prop) => prop.into(),
-                        RelLit(rel) => rel,
-                        _ => panic!("Expected sentence")
-                    };
-                    sentence_results.insert(sentence);
-                }
-
-                while sentence_results.len() >
-                    context.previous_results.get_mut(&renamed_rel).unwrap().len() {
-
-                    assert!(context.called_recursively.remove(&renamed_rel));
-                    context.previous_results.get_mut(&renamed_rel).unwrap()
-                        .extend(sentence_results);
-
-                    new_results = self.get_relation_results(rel.clone(), theta, &candidates,
-                                                            context);
-
-                    sentence_results = HashSet::new();
-                    for res in new_results.iter() {
-                        let s: Sentence = rel.clone().into();
-                        let l: Literal = s.into();
-                        let sentence = match res.substitute(&l) {
-                            PropLit(prop) => prop.into(),
-                            RelLit(rel) => rel,
-                            _ => panic!("Expected sentence")
-                        };
-                        sentence_results.insert(sentence);
-                    }
-                }
-                assert!(context.called_recursively.remove(&renamed_rel));
-                assert!(context.previous_results.remove(&renamed_rel).is_some());
-            }
-            assert!(context.already_asking.remove(&renamed_rel));
-            if context.called_recursively.is_empty() {
-                context.cache.insert(&rel, renamed_rel.clone(), &new_results);
-            }
-            new_results
-        } else {
-            cache_query.unwrap()
-        };
-
-        for res in sentences {
-            self.ask_goals(goals, results, &mut theta.compose(res), context);
-        }
     }
 
     fn ask_or(&self, or: Or, goals: &mut VecDeque<Literal>, results: &mut HashSet<Substitution>,
@@ -462,65 +329,13 @@ impl Prover {
     }
 }
 
-/// Unifies relations `r1` and `r2`, returning a `Substitution` mapping one into the other if such
-/// a substitution exists, otherwise returns `None`.
-fn unify(r1: Relation, r2: Relation) -> Option<Substitution> {
-    let x = Function::new(r1.name, r1.args).into();
-    let y = Function::new(r2.name, r2.args).into();
-    unify_term(&x, &y, Substitution::new())
-}
-
-fn unify_term(x: &Term, y: &Term, theta: Substitution) -> Option<Substitution> {
-    if x == y {
-        return Some(theta)
-    }
-
-    match (x, y) {
-        (&VarTerm(ref v), _) => unify_variable(v, y, theta),
-        (_, &VarTerm(ref v)) => unify_variable(v, x, theta),
-        (&ConstTerm(_), &ConstTerm(_)) => None,
-        (&FuncTerm(ref f1), &FuncTerm(ref f2)) => {
-            match unify_term(&f1.name.clone().into(), &f2.name.clone().into(), theta) {
-                Some(theta) => {
-                    assert_eq!(f1.args.len(), f2.args.len());
-                    let mut theta = theta;
-                    for (arg1, arg2) in f1.args.iter().zip(f2.args.iter()) {
-                        match unify_term(arg1, arg2, theta) {
-                            Some(theta_prime) => theta = theta_prime,
-                            None => return None
-                        }
-                    }
-                    Some(theta)
-                },
-                None => None
-            }
-        },
-        _ => None
-    }
-}
-
-fn unify_variable(x: &Variable, y: &Term, mut theta: Substitution) -> Option<Substitution> {
-    if let Some(ref t) = theta.get(&x).cloned() {
-        return unify_term(t, y, theta);
-    }
-    if let &VarTerm(ref v) = y {
-        if let Some(ref t) = theta.get(&v).cloned() {
-            return unify_term(&x.clone().into(), t, theta)
-        }
-    }
-
-    // Neither x nor y were found in theta
-    theta.insert(x.clone(), y.clone());
-    Some(theta)
-}
-
 pub struct QueryResult {
     props: HashSet<Sentence>
 }
 
 impl QueryResult {
     pub fn into_state(self) -> State {
-        let mut trues = HashSet::new();
+        let mut trues = HashSet::with_capacity(self.props.len());
         for s in self.props {
             match s {
                 RelSentence(mut r) => {
@@ -534,7 +349,7 @@ impl QueryResult {
     }
 
     pub fn into_moves(self) -> Vec<Move> {
-        let mut moves = Vec::new();
+        let mut moves = Vec::with_capacity(self.props.len());
         for s in self.props {
             let term = match s {
                 RelSentence(mut r) => r.args.swap_remove(1),
@@ -547,9 +362,10 @@ impl QueryResult {
 
     pub fn into_score(self) -> Score {
         assert_eq!(self.props.len(), 1);
+        let goal_const = Constant::new("goal");
         match self.props.into_iter().next().unwrap() {
             RelSentence(mut r) => {
-                assert_eq!(r.name, Constant::new("goal"));
+                assert_eq!(r.name, goal_const);
                 assert_eq!(r.args.len(), 2);
                 let score = r.args.swap_remove(1);
                 match score {
@@ -590,17 +406,13 @@ pub mod query_builder {
 
 #[cfg(test)]
 mod test {
-    use std::collections::{HashSet, BTreeMap};
+    use std::collections::HashSet;
     use std::fs::File;
     use std::io::Read;
 
-    use gdl::{self, Relation, Description, Constant, Function, Variable, Role, Move};
-    use gdl::Sentence::RelSentence;
-    use gdl::Clause::SentenceClause;
-
+    use gdl::{self, Relation, Constant, Function, Role, Move};
     use game_manager::State;
-
-    use super::{unify, query_builder, Prover, Substitution};
+    use super::{query_builder, Prover};
 
     fn construct_prover(filename: &str) -> (Prover, State) {
         let mut gdl = String::new();
@@ -610,48 +422,6 @@ mod test {
         let init_state = prover.ask(query_builder::init_query(), State::new()).into_state();
 
         (prover, init_state)
-    }
-
-    fn to_relation(mut desc: Description) -> Relation {
-        let c = desc.clauses.swap_remove(0);
-        match c {
-            SentenceClause(s) => match s {
-                RelSentence(r) => r,
-                _ => panic!("")
-            },
-            _ => panic!("")
-        }
-    }
-
-    #[test]
-    fn test_unify() {
-        let a = to_relation(gdl::parse("(legal white ?l)"));
-        let b = to_relation(gdl::parse("(legal ?p (reduce ?x ?n))"));
-        let c = to_relation(gdl::parse("(reduce ?x ?n)"));
-
-        let mut map = BTreeMap::new();
-        map.insert(Variable::new("p"), Constant::new("white").into());
-        map.insert(Variable::new("l"), Function::new(c.name, c.args).into());
-        let theta = Substitution { mapping: map };
-        assert_eq!(unify(a, b).unwrap(), theta);
-    }
-
-    #[test]
-    fn test_substitute() {
-        let a = to_relation(gdl::parse("(legal ?p ?m)")).into();
-        let b = to_relation(gdl::parse("(legal white (reduce a 1))")).into();
-
-        let mut mapping = BTreeMap::new();
-        mapping.insert(Variable::new("p"), Constant::new("white").into());
-        mapping.insert(Variable::new("m"),
-                       Function::new("reduce",
-                                     vec![Variable::new("R1").into(),
-                                          Variable::new("R2").into()]).into());
-        mapping.insert(Variable::new("R1"), Constant::new("a").into());
-        mapping.insert(Variable::new("R2"), Constant::new("1").into());
-        let theta = Substitution { mapping: mapping };
-
-        assert_eq!(theta.substitute(&a), b);
     }
 
     #[test]

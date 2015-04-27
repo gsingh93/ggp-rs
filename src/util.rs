@@ -31,3 +31,22 @@ pub fn literal_into_relation(l: Literal) -> Relation {
         _ => panic!("Expected a proposition or relation, got {}", l)
     }
 }
+
+#[cfg(test)]
+pub mod test {
+    use gdl::{Description, Relation};
+    use gdl::Clause::SentenceClause;
+    use gdl::Sentence::RelSentence;
+
+    pub fn to_relation(mut desc: Description) -> Relation {
+        let c = desc.clauses.swap_remove(0);
+        match c {
+            SentenceClause(s) => match s {
+                RelSentence(r) => r,
+                _ => panic!("")
+            },
+            _ => panic!("")
+        }
+    }
+
+}
