@@ -7,6 +7,7 @@
 //! until no new substitutions are found.
 
 use std::collections::{HashSet, HashMap, VecDeque};
+use std::cell::RefCell;
 
 use game_manager::State;
 use prover::negative_literal_mover;
@@ -67,7 +68,9 @@ struct RecursionContext {
     previous_results: HashMap<Relation, HashSet<Relation>>,
     state: RuleMap,
     renamer: VarRenamer,
-    cache: Cache
+
+    /// This caches results for relations we've seen during the proving of the original query
+    cache: Cache,
 }
 
 impl RecursionContext {
@@ -81,7 +84,10 @@ impl RecursionContext {
 type RuleMap = HashMap<Constant, Vec<Rule>>;
 
 pub struct Prover {
-    rule_map: RuleMap
+    rule_map: RuleMap,
+
+    /// This caches results for relations whose results will never change
+    fixed_cache: RefCell<Cache>
 }
 
 impl Prover {
@@ -99,7 +105,7 @@ impl Prover {
             let v = entry.or_insert_with(|| Vec::new());
             v.push(r);
         }
-        Prover { rule_map: rule_map }
+        Prover { rule_map: rule_map, fixed_cache: RefCell::new(Cache::new()) }
     }
 
     // Ask whether the query `query` is true in the state `state`
@@ -154,48 +160,62 @@ impl Prover {
     }
 
     fn ask_goals(&self, goals: &mut VecDeque<Literal>, results: &mut HashSet<Substitution>,
-                 theta: &mut Substitution, context: &mut RecursionContext) {
+                 theta: &mut Substitution, context: &mut RecursionContext) -> bool {
         if cfg!(not(ndebug)) {
             let goal_str: Vec<String> = goals.iter().map(|x| x.to_string()).collect();
             debug!("goals: {:?}", goal_str);
         }
 
         let l = match goals.pop_front() {
-            None => { results.insert(theta.clone()); return },
+            // TODO: Why true?
+            None => { results.insert(theta.clone()); return true; },
             Some(l) => l
         };
 
         let q = theta.substitute(&l);
         debug!("Goal query: {} (original: {})", q, l);
-        match q {
+        let is_constant = match q {
             OrLit(or) => self.ask_or(or, goals, results, theta, context),
             NotLit(not) => self.ask_not(not, goals, results, theta, context),
             DistinctLit(distinct) => self.ask_distinct(distinct, goals, results, theta, context),
             PropLit(prop) => self.ask_prop(prop, goals, results, theta, context),
             RelLit(rel) => self.ask_rel(rel, goals, results, theta, context)
-        }
+        };
 
         goals.push_front(l);
+
+        is_constant
     }
 
     fn ask_prop(&self, prop: Proposition, goals: &mut VecDeque<Literal>,
                 results: &mut HashSet<Substitution>, theta: &mut Substitution,
-                context: &mut RecursionContext) {
-        self.ask_rel(prop.into(), goals, results, theta, context);
+                context: &mut RecursionContext) -> bool {
+        self.ask_rel(prop.into(), goals, results, theta, context)
     }
 
     fn ask_rel(&self, rel: Relation, goals: &mut VecDeque<Literal>,
                results: &mut HashSet<Substitution>, theta: &mut Substitution,
-               context: &mut RecursionContext) {
+               context: &mut RecursionContext) -> bool {
         let renamed_rel = match VarRenamer::new().rename_sentence(&rel.clone().into()) {
             RelSentence(rel) => rel,
             _ => panic!("Expected relation")
         };
 
 
-        let sentences = if let Some(sentences) = context.cache.get(&rel, &renamed_rel) {
-            sentences
+        let cache_res = if let Some(sentences) = self.fixed_cache.borrow().get(&rel, &renamed_rel) {
+                (Some(sentences), true)
         } else {
+            let true_or_does = rel.name == Constant::new("does")
+                || rel.name == Constant::new("true");
+            if let Some(sentences) = context.cache.get(&rel, &renamed_rel) {
+                (Some(sentences), !true_or_does)
+            } else {
+                (None, !true_or_does)
+            }
+        };
+        let (cached_sentences, mut is_constant) = cache_res;
+
+        let sentences = if cached_sentences.is_none() {
             if context.already_asking.contains(&renamed_rel) {
                 debug!("Recursively called {}, backtracking", renamed_rel);
                 context.called_recursively.insert(renamed_rel.clone());
@@ -203,9 +223,10 @@ impl Prover {
                     .or_insert_with(|| HashSet::new()).clone();
                 for res in prev_results {
                     let theta_prime = unify(res, rel.clone()).unwrap();
-                    self.ask_goals(goals, results, &mut theta.compose(theta_prime), context);
+                    is_constant = is_constant &
+                        self.ask_goals(goals, results, &mut theta.compose(theta_prime), context);
                 }
-                return;
+                return is_constant;
             }
             context.already_asking.insert(renamed_rel.clone());
 
@@ -222,7 +243,7 @@ impl Prover {
             }
 
             let mut new_results = self.get_relation_results(rel.clone(), theta, &candidates,
-                                                            context);
+                                                            context, &mut is_constant);
             debug!("{} results from unifying {}", new_results.len(), rel);
 
             if context.called_recursively.contains(&renamed_rel) {
@@ -243,7 +264,7 @@ impl Prover {
                         .extend(sentence_results);
 
                     new_results = self.get_relation_results(rel.clone(), theta, &candidates,
-                                                            context);
+                                                            context, &mut is_constant);
 
                     sentence_results = HashSet::with_capacity(new_results.len());
                     for res in new_results.iter() {
@@ -258,18 +279,27 @@ impl Prover {
             }
             assert!(context.already_asking.remove(&renamed_rel));
             if context.called_recursively.is_empty() {
-                context.cache.insert(&rel, renamed_rel.clone(), &new_results);
+                if is_constant {
+                    self.fixed_cache.borrow_mut().insert(&rel, renamed_rel.clone(), &new_results);
+                } else {
+                    context.cache.insert(&rel, renamed_rel.clone(), &new_results);
+                }
             }
             new_results
+        } else {
+            cached_sentences.unwrap()
         };
 
         for res in sentences {
-            self.ask_goals(goals, results, &mut theta.compose(res), context);
+            is_constant = is_constant & self.ask_goals(goals, results, &mut theta.compose(res),
+                                                       context);
         }
+        is_constant
     }
 
     fn get_relation_results(&self, rel: Relation, theta: &Substitution, candidates: &HashSet<Rule>,
-                            context: &mut RecursionContext) -> HashSet<Substitution> {
+                            context: &mut RecursionContext,
+                            is_constant: &mut bool) -> HashSet<Substitution> {
         let mut new_results = HashSet::new();
         debug!("{} candidates found for unification", candidates.len());
         if cfg!(not(ndebug)) {
@@ -288,8 +318,9 @@ impl Prover {
                 debug!("Unification Success");
                 let mut new_goals = VecDeque::new();
                 new_goals.extend(rule.body.clone());
-                self.ask_goals(&mut new_goals, &mut new_results, &mut theta.compose(theta_prime),
-                               context);
+                *is_constant = *is_constant &
+                    self.ask_goals(&mut new_goals, &mut new_results,
+                                   &mut theta.compose(theta_prime), context);
                 debug!("Continuing unification loop for {}", rel);
             } else {
                 debug!("Unification failure");
@@ -299,32 +330,37 @@ impl Prover {
     }
 
     fn ask_or(&self, or: Or, goals: &mut VecDeque<Literal>, results: &mut HashSet<Substitution>,
-              theta: &mut Substitution, context: &mut RecursionContext) {
+              theta: &mut Substitution, context: &mut RecursionContext) -> bool {
+        let mut is_constant = true;
         for lit in or.lits.into_iter() {
             goals.push_front(lit);
-            self.ask_goals(goals, results, theta, context);
+            is_constant = is_constant & self.ask_goals(goals, results, theta, context);
             goals.pop_front().unwrap();
         }
+        is_constant
     }
 
     fn ask_not(&self, not: Not, goals: &mut VecDeque<Literal>, results: &mut HashSet<Substitution>,
-               theta: &mut Substitution, context: &mut RecursionContext) {
+               theta: &mut Substitution, context: &mut RecursionContext) -> bool {
         let mut not_goals = VecDeque::new();
         let mut not_results = HashSet::new();
 
         not_goals.push_front(*not.lit);
-        self.ask_goals(&mut not_goals, &mut not_results, theta, context);
+        let mut is_constant = self.ask_goals(&mut not_goals, &mut not_results, theta, context);
 
         if not_results.is_empty() {
-            self.ask_goals(goals, results, theta, context);
+            is_constant = is_constant & self.ask_goals(goals, results, theta, context);
         }
+        is_constant
     }
 
     fn ask_distinct(&self, distinct: Distinct, goals: &mut VecDeque<Literal>,
                     results: &mut HashSet<Substitution>, theta: &mut Substitution,
-                    context: &mut RecursionContext) {
+                    context: &mut RecursionContext) -> bool {
         if distinct.term1 != distinct.term2 {
-            self.ask_goals(goals, results, theta, context);
+            self.ask_goals(goals, results, theta, context)
+        } else {
+            true
         }
     }
 }
