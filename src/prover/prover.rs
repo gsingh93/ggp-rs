@@ -23,6 +23,15 @@ use gdl::Literal::{OrLit, NotLit, DistinctLit, PropLit, RelLit};
 use gdl::Sentence::{PropSentence, RelSentence};
 use gdl::Term::ConstTerm;
 
+mod constants {
+    use gdl::Constant;
+
+    lazy_static! {
+        pub static ref TRUE_CONST: Constant = Constant::new("true");
+        pub static ref DOES_CONST: Constant = Constant::new("does");
+    }
+}
+
 struct Cache {
     cache: HashMap<Relation, HashSet<Relation>>
 }
@@ -81,7 +90,54 @@ impl RecursionContext {
     }
 }
 
-type RuleMap = HashMap<Constant, Vec<Rule>>;
+/// A mapping between rule heads and rules
+struct RuleMap {
+    map: HashMap<Constant, Vec<Rule>>
+}
+
+impl RuleMap {
+    fn from_description(desc: Description) -> RuleMap {
+        let mut rule_map = HashMap::with_capacity(desc.clauses.len());
+        for clause in desc.clauses {
+            let (entry, r) = match clause {
+                RuleClause(r) => (rule_map.entry(r.head.name().clone()), r),
+                SentenceClause(s) => (rule_map.entry(s.name().clone()), s.into())
+            };
+            // The closure should prevent unnecessary allocation of empty `Vec`s
+            let v = entry.or_insert_with(|| Vec::new());
+            v.push(r);
+        }
+        RuleMap { map: rule_map }
+    }
+
+    fn from_state(state: State) -> RuleMap {
+        let mut trues = Vec::new();
+        let mut does = Vec::new();
+        for s in state.props {
+            if *s.name() == *constants::TRUE_CONST {
+                trues.push(s.into())
+            } else if *s.name() == *constants::DOES_CONST {
+                does.push(s.into());
+            } else {
+                panic!("State contains something other than `true` and `does`");
+            }
+        }
+        if cfg!(not(ndebug)) {
+            let state_str: Vec<_> =
+                trues.iter().chain(does.iter()).map(|x: &Rule| x.head.to_string()).collect();
+            debug!("state: {:?}", state_str);
+        }
+        let mut rule_map = HashMap::new();
+        rule_map.insert(Constant::new("true"), trues);
+        rule_map.insert(Constant::new("does"), does);
+
+        RuleMap { map: rule_map }
+    }
+
+    fn get(&self, name: &Constant) -> Option<&Vec<Rule>> {
+        self.map.get(name)
+    }
+}
 
 pub struct Prover {
     rule_map: RuleMap,
@@ -93,19 +149,8 @@ pub struct Prover {
 impl Prover {
     pub fn new(desc: Description) -> Prover {
         let desc = negative_literal_mover::reorder(desc);
-
-        // Convert the game description into a mapping between rule heads and rules
-        let mut rule_map = HashMap::with_capacity(desc.clauses.len());
-        for clause in desc.clauses {
-            let (entry, r) = match clause {
-                RuleClause(r) => (rule_map.entry(r.head.name().clone()), r),
-                SentenceClause(s) => (rule_map.entry(s.name().clone()), s.into())
-            };
-            // The closure should prevent unnecessary allocation of empty `Vec`s
-            let v = entry.or_insert_with(|| Vec::new());
-            v.push(r);
-        }
-        Prover { rule_map: rule_map, fixed_cache: RefCell::new(Cache::new()) }
+        Prover { rule_map: RuleMap::from_description(desc),
+                 fixed_cache: RefCell::new(Cache::new()) }
     }
 
     // Ask whether the query `query` is true in the state `state`
@@ -119,31 +164,7 @@ impl Prover {
         let query: Literal = query.into();
         goals.push_front(query.clone());
 
-        // Create a mapping from rule heads to rules from the given state. The only two types of
-        // rule heads in the state should be `true` and `does` relations
-        let mut trues = Vec::new();
-        let mut does = Vec::new();
-        let true_const = Constant::new("true");
-        let does_const = Constant::new("does");
-        for s in state.props {
-            if *s.name() == true_const {
-                trues.push(s.into())
-            } else if *s.name() == does_const {
-                does.push(s.into());
-            } else {
-                panic!("State contains something other than `true` and `does`");
-            }
-        }
-        if cfg!(not(ndebug)) {
-            let state_str: Vec<_> =
-                trues.iter().chain(does.iter()).map(|x: &Rule| x.head.to_string()).collect();
-            debug!("state: {:?}", state_str);
-        }
-        let mut state_map = RuleMap::new();
-        state_map.insert(Constant::new("true"), trues);
-        state_map.insert(Constant::new("does"), does);
-
-        let mut context = RecursionContext::new(state_map);
+        let mut context = RecursionContext::new(RuleMap::from_state(state));
         let mut results = HashSet::new();
         self.ask_goals(&mut goals, &mut results, &mut Substitution::new(), &mut context);
 
