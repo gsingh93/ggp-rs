@@ -6,7 +6,7 @@
 //! remaining subgoals have been proved, we return to the marked relation and attempt to prove it
 //! until no new substitutions are found.
 
-use std::collections::{HashSet, HashMap, VecDeque};
+use std::collections::{HashSet, HashMap, VecDeque, BTreeSet};
 use std::cell::RefCell;
 use std::sync::Arc;
 
@@ -17,21 +17,12 @@ use prover::substitution::Substitution;
 use prover::renamer::VarRenamer;
 use util::literal_into_relation;
 
-use gdl::{Description, Sentence, Proposition, Relation, Move, Score, Literal, Or, Not, Distinct,
-          Constant, Rule};
+use gdl::{constants, Description, Sentence, Proposition, Relation, Move, Score, Literal, Or,
+          Not, Distinct, Constant, Rule};
 use gdl::Clause::{SentenceClause, RuleClause};
 use gdl::Literal::{OrLit, NotLit, DistinctLit, PropLit, RelLit};
 use gdl::Sentence::{PropSentence, RelSentence};
 use gdl::Term::ConstTerm;
-
-mod constants {
-    use gdl::Constant;
-
-    lazy_static! {
-        pub static ref TRUE_CONST: Constant = Constant::new("true");
-        pub static ref DOES_CONST: Constant = Constant::new("does");
-    }
-}
 
 struct Cache {
     cache: HashMap<Arc<Relation>, HashSet<Relation>>
@@ -184,7 +175,7 @@ impl Prover {
 
     fn ask_goals(&self, goals: &mut VecDeque<Literal>, results: &mut HashSet<Substitution>,
                  theta: &mut Substitution, context: &mut RecursionContext) -> bool {
-        if cfg!(not(ndebug)) {
+        if cfg!(debug_assertions) {
             let goal_str: Vec<String> = goals.iter().map(|x| x.to_string()).collect();
             debug!("goals: {:?}", goal_str);
         }
@@ -327,7 +318,7 @@ impl Prover {
                             is_constant: &mut bool) -> HashSet<Substitution> {
         let mut new_results = HashSet::new();
         debug!("{} candidates found for unification", candidates.len());
-        if cfg!(not(ndebug)) {
+        if cfg!(debug_assertions) {
             let candidate_str: Vec<_> = candidates.iter().map(|x| x.to_string()).collect();
             debug!("Possible candidates: {:?}", candidate_str);
         }
@@ -396,7 +387,7 @@ pub struct QueryResult {
 
 impl QueryResult {
     pub fn into_state(self) -> State {
-        let mut trues = HashSet::with_capacity(self.props.len());
+        let mut trues = BTreeSet::new();
         for s in self.props {
             match s {
                 RelSentence(mut r) => {
@@ -467,7 +458,7 @@ pub mod query_builder {
 
 #[cfg(test)]
 mod test {
-    use std::collections::HashSet;
+    use std::collections::{HashSet, BTreeSet};
     use std::fs::File;
     use std::io::Read;
 
@@ -522,7 +513,7 @@ mod test {
                    (<= (next (control red)) (true (control black)))";
         let prover = Prover::new(gdl::parse(gdl));
         let init_state = prover.ask(query_builder::init_query(), State::new()).into_state();
-        let mut props = HashSet::new();
+        let mut props = BTreeSet::new();
         props.insert(
             Relation::new("true",
                           vec![Function::new("control",
@@ -530,7 +521,7 @@ mod test {
         assert_eq!(init_state, State { props: props });
         let next_state = prover.ask(query_builder::next_query(), init_state).into_state();
 
-        let mut props = HashSet::new();
+        let mut props = BTreeSet::new();
         props.insert(
             Relation::new("true",
                           vec![Function::new("control",
@@ -552,7 +543,7 @@ mod test {
                    (<= (next s) (or (does black p) (true s)))";
         let prover = Prover::new(gdl::parse(gdl));
         let mut init_state = prover.ask(query_builder::init_query(), State::new()).into_state();
-        let mut props = HashSet::new();
+        let mut props = BTreeSet::new();
         props.insert(Relation::new(
             "true",
             vec![Function::new("control",
@@ -568,7 +559,7 @@ mod test {
 
         let next_state = prover.ask(query_builder::next_query(), init_state).into_state();
 
-        let mut props = HashSet::new();
+        let mut props = BTreeSet::new();
         props.insert(
             Relation::new("true",
                           vec![Function::new(Constant::new("control"),

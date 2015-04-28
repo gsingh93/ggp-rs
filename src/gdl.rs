@@ -4,6 +4,20 @@ pub use gdl_parser::{Description, Clause, Rule, Sentence, Term, Literal, Constan
                      Function, Relation, Proposition, Not, Or, Distinct};
 pub use gdl_parser::parse;
 
+#[allow(unused)]
+pub mod constants {
+    use gdl::Constant;
+
+    lazy_static! {
+        pub static ref TRUE_CONST: Constant = Constant::new("true");
+        pub static ref DOES_CONST: Constant = Constant::new("does");
+        pub static ref NEXT_CONST: Constant = Constant::new("next");
+        pub static ref LEGAL_CONST: Constant = Constant::new("legal");
+        pub static ref GOAL_CONST: Constant = Constant::new("goal");
+        pub static ref TERMINAL_CONST: Constant = Constant::new("terminal");
+    }
+}
+
 /// The score a player can get at a goal state
 pub type Score = u8;
 

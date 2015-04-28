@@ -5,4 +5,4 @@ mod deorer;
 mod negative_literal_mover;
 mod prover;
 
-pub use self::prover::{Prover, query_builder};
+pub use self::prover::{Prover, query_builder, QueryResult};

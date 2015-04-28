@@ -1,4 +1,6 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, BTreeSet};
+use std::collections::hash_map::Entry::{Occupied, Vacant};
+use std::cell::RefCell;
 
 use Player;
 use util::{cross_product, create_does};
@@ -26,18 +28,53 @@ pub struct Game {
     play_clock: u32,
     cur_state: State,
     init_state: State,
-    prover: Prover
+    prover: Prover,
+    cache: RefCell<Cache>,
+}
+
+struct Cache {
+    cache: HashMap<State, CacheEntry>
+}
+
+impl Cache {
+    fn new() -> Cache {
+        Cache { cache: HashMap::new() }
+    }
+
+    fn get(&mut self, state: &State) -> &mut CacheEntry {
+        // We don't use cache.entry() as the cost of cloning `state` will probably not be worth it
+        if self.cache.contains_key(state) {
+            self.cache.get_mut(state).unwrap()
+        } else {
+            self.cache.insert(state.clone(), CacheEntry::new());
+            self.cache.get_mut(state).unwrap()
+        }
+    }
+}
+
+struct CacheEntry {
+    legals: HashMap<Role, Vec<Move>>,
+    next: HashMap<Vec<Move>, State>,
+    terminal: Option<bool>,
+    goals: HashMap<Role, Score>
+}
+
+impl CacheEntry {
+    fn new() -> CacheEntry {
+        CacheEntry { legals: HashMap::new(), next: HashMap::new(), terminal: None,
+                     goals: HashMap::new() }
+    }
 }
 
 /// The state of a game, containing all `Sentence`s that are true in this state
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct State {
-    pub props: HashSet<Sentence>
+    pub props: BTreeSet<Sentence>
 }
 
 impl State {
     pub fn new() -> State {
-        State { props: HashSet::new() }
+        State { props: BTreeSet::new() }
     }
 }
 
@@ -49,7 +86,7 @@ impl Game {
 
         Game { match_state: Started, roles: roles, role: role, start_clock: start_clock,
                play_clock: play_clock, init_state: init_state.clone(), cur_state: init_state,
-               prover: prover }
+               prover: prover, cache: RefCell::new(Cache::new()) }
     }
 
     fn compute_roles(desc: &Description) -> Vec<Role> {
@@ -72,7 +109,16 @@ impl Game {
 
     /// Returns true if `state` is a terminal state
     pub fn is_terminal(&self, state: &State) -> bool {
-        self.prover.prove(query_builder::terminal_query(), (*state).clone())
+        let mut cache = self.cache.borrow_mut();
+        let entry = cache.get(state);
+        match entry.terminal {
+            Some(b) => b,
+            None => {
+                let res = self.prover.prove(query_builder::terminal_query(), state.clone());
+                entry.terminal = Some(res);
+                res
+            }
+        }
     }
 
     /// Returns the roles of the game
@@ -97,7 +143,17 @@ impl Game {
 
     /// Returns all legal moves for role `role` in the state `state`
     pub fn get_legal_moves(&self, state: &State, role: &Role) -> Vec<Move> {
-        self.prover.ask(query_builder::legal_query(role), (*state).clone()).into_moves()
+        let mut cache = self.cache.borrow_mut();
+        let mut entry = cache.get(state);
+        match entry.legals.entry(role.clone()) {
+            Occupied(e) => e.get().clone(),
+            Vacant(e) => {
+                let res = self.prover.ask(query_builder::legal_query(role),
+                                          state.clone()).into_moves();
+                e.insert(res.clone());
+                res
+            }
+        }
     }
 
     /// Returns all legal joint moves in state `state`. Each element of the resulting vector is a
@@ -122,7 +178,17 @@ impl Game {
 
     /// Returns the score for role `role` in state `state`
     pub fn get_goal(&self, state: &State, role: &Role) -> Score {
-        self.prover.ask(query_builder::goal_query(role), (*state).clone()).into_score()
+        let mut cache = self.cache.borrow_mut();
+        let mut entry = cache.get(state);
+        match entry.goals.entry(role.clone()) {
+            Occupied(e) => e.get().clone(),
+            Vacant(e) => {
+                let res = self.prover.ask(query_builder::goal_query(role),
+                                          state.clone()).into_score();
+                e.insert(res.clone());
+                res
+            }
+        }
     }
 
     /// Gets all possible next states given state `state`
@@ -140,12 +206,22 @@ impl Game {
             return state.clone();
         }
         assert_eq!(moves.len(), self.roles.len());
-        let mut s = state.clone();
-        for (m, r) in moves.iter().zip(self.roles.iter()) {
-            s.props.insert(create_does(r, m));
-        }
 
-        self.prover.ask(query_builder::next_query(), s.clone()).into_state()
+        let mut cache = self.cache.borrow_mut();
+        let mut entry = cache.get(state);
+        match entry.next.entry(moves.iter().cloned().collect()) {
+            Occupied(e) => e.get().clone(),
+            Vacant(e) => {
+                let mut s = state.clone();
+                for (m, r) in moves.iter().zip(self.roles.iter()) {
+                    s.props.insert(create_does(r, m));
+                }
+
+                let res = self.prover.ask(query_builder::next_query(), s).into_state();
+                e.insert(res.clone());
+                res
+            }
+        }
     }
 
     /// Gets the start clock time
@@ -163,7 +239,7 @@ impl Game {
             self.match_state = Playing;
         }
         let new_state = self.get_next_state(&self.cur_state, moves);
-        if cfg!(not(ndebug)) {
+        if cfg!(debug_assertions) {
             let old_props: Vec<_> =
                 self.cur_state.props.difference(&new_state.props).cloned().collect();
             let new_props: Vec<_> =
@@ -172,6 +248,9 @@ impl Game {
             debug!("Added propositions: {:?}", new_props);
         }
         self.cur_state = new_state;
+
+        // TODO: How often to clear cache?
+        self.cache.borrow_mut().cache.clear();
     }
 
     fn finish(&mut self, moves: &[Move]) {
