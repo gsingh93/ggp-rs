@@ -8,6 +8,7 @@
 
 use std::collections::{HashSet, HashMap, VecDeque};
 use std::cell::RefCell;
+use std::sync::Arc;
 
 use game_manager::State;
 use prover::negative_literal_mover;
@@ -33,7 +34,7 @@ mod constants {
 }
 
 struct Cache {
-    cache: HashMap<Relation, HashSet<Relation>>
+    cache: HashMap<Arc<Relation>, HashSet<Relation>>
 }
 
 impl Cache {
@@ -41,7 +42,8 @@ impl Cache {
         Cache { cache: HashMap::new() }
     }
 
-    fn insert(&mut self, rel: &Relation, renamed_rel: Relation, results: &HashSet<Substitution>) {
+    fn insert(&mut self, rel: &Relation, renamed_rel: Arc<Relation>,
+              results: &HashSet<Substitution>) {
         // We store relations instead of substitutions so that if the same sentence is queried
         // with different variables, we can extract a new substitution that uses the correct
         // variables.
@@ -68,13 +70,13 @@ impl Cache {
 
 struct RecursionContext {
     /// Contains all relations that have been asked about but have not received answers
-    already_asking: HashSet<Relation>,
+    already_asking: HashSet<Arc<Relation>>,
 
     /// Contains all relations that have asked about themselves recursively
-    called_recursively: HashSet<Relation>,
+    called_recursively: HashSet<Arc<Relation>>,
 
     /// Contains a mapping of relations to their (possibly partial) unification results
-    previous_results: HashMap<Relation, HashSet<Relation>>,
+    previous_results: HashMap<Arc<Relation>, HashSet<Relation>>,
     state: RuleMap,
     renamer: VarRenamer,
 
@@ -92,7 +94,7 @@ impl RecursionContext {
 
 /// A mapping between rule heads and rules
 struct RuleMap {
-    map: HashMap<Constant, Vec<Rule>>
+    map: HashMap<Constant, Vec<Arc<Rule>>>
 }
 
 impl RuleMap {
@@ -105,7 +107,7 @@ impl RuleMap {
             };
             // The closure should prevent unnecessary allocation of empty `Vec`s
             let v = entry.or_insert_with(|| Vec::new());
-            v.push(r);
+            v.push(Arc::new(r));
         }
         RuleMap { map: rule_map }
     }
@@ -115,16 +117,16 @@ impl RuleMap {
         let mut does = Vec::new();
         for s in state.props {
             if *s.name() == *constants::TRUE_CONST {
-                trues.push(s.into())
+                trues.push(Arc::new(s.into()))
             } else if *s.name() == *constants::DOES_CONST {
-                does.push(s.into());
+                does.push(Arc::new(s.into()));
             } else {
                 panic!("State contains something other than `true` and `does`");
             }
         }
         if cfg!(not(ndebug)) {
             let state_str: Vec<_> =
-                trues.iter().chain(does.iter()).map(|x: &Rule| x.head.to_string()).collect();
+                trues.iter().chain(does.iter()).map(|x: &Arc<Rule>| x.head.to_string()).collect();
             debug!("state: {:?}", state_str);
         }
         let mut rule_map = HashMap::new();
@@ -134,7 +136,7 @@ impl RuleMap {
         RuleMap { map: rule_map }
     }
 
-    fn get(&self, name: &Constant) -> Option<&Vec<Rule>> {
+    fn get(&self, name: &Constant) -> Option<&Vec<Arc<Rule>>> {
         self.map.get(name)
     }
 }
@@ -221,10 +223,12 @@ impl Prover {
             RelSentence(rel) => rel,
             _ => panic!("Expected relation")
         };
+        let renamed_rel = Arc::new(renamed_rel);
 
 
-        let cache_res = if let Some(sentences) = self.fixed_cache.borrow().get(&rel, &renamed_rel) {
-                (Some(sentences), true)
+        let cache_res = if let Some(sentences) = self.fixed_cache.borrow().get(&rel,
+                                                                               &renamed_rel) {
+            (Some(sentences), true)
         } else {
             let true_or_does = rel.name == Constant::new("does")
                 || rel.name == Constant::new("true");
@@ -251,7 +255,7 @@ impl Prover {
             }
             context.already_asking.insert(renamed_rel.clone());
 
-            let mut candidates: HashSet<Rule> = HashSet::new();
+            let mut candidates: HashSet<Arc<Rule>> = HashSet::new();
 
             // Check whether the relation is already a true statement
             if let Some(rules) = context.state.get(&rel.name) {
@@ -263,14 +267,14 @@ impl Prover {
                 candidates.extend(rules.clone());
             }
 
-            let mut new_results = self.get_relation_results(rel.clone(), theta, &candidates,
+            let mut new_results = self.get_relation_results(&rel, theta, &candidates,
                                                             context, &mut is_constant);
             debug!("{} results from unifying {}", new_results.len(), rel);
 
             if context.called_recursively.contains(&renamed_rel) {
                 debug!("Rehandling {} due to recursive call", renamed_rel);
                 let mut sentence_results = HashSet::with_capacity(new_results.len());
-                for res in new_results.clone() {
+                for res in new_results.iter() {
                     let s: Sentence = rel.clone().into();
                     let l: Literal = s.into();
                     let sentence = literal_into_relation(res.substitute(&l));
@@ -284,7 +288,7 @@ impl Prover {
                     context.previous_results.get_mut(&renamed_rel).unwrap()
                         .extend(sentence_results);
 
-                    new_results = self.get_relation_results(rel.clone(), theta, &candidates,
+                    new_results = self.get_relation_results(&rel, theta, &candidates,
                                                             context, &mut is_constant);
 
                     sentence_results = HashSet::with_capacity(new_results.len());
@@ -318,8 +322,8 @@ impl Prover {
         is_constant
     }
 
-    fn get_relation_results(&self, rel: Relation, theta: &Substitution, candidates: &HashSet<Rule>,
-                            context: &mut RecursionContext,
+    fn get_relation_results(&self, rel: &Relation, theta: &Substitution,
+                            candidates: &HashSet<Arc<Rule>>, context: &mut RecursionContext,
                             is_constant: &mut bool) -> HashSet<Substitution> {
         let mut new_results = HashSet::new();
         debug!("{} candidates found for unification", candidates.len());
@@ -328,17 +332,17 @@ impl Prover {
             debug!("Possible candidates: {:?}", candidate_str);
         }
         for rule in candidates.iter() {
-            let rule = context.renamer.rename_rule(&rule);
-            let rel_head = match rule.head.clone() {
+            let rule = context.renamer.rename_rule(rule);
+            let rel_head = match rule.head {
                 PropSentence(p) => p.into(),
                 RelSentence(r) => r
             };
 
             debug!("Unifying {} and {}", rel_head, rel);
-            if let Some(theta_prime) = unify(rel_head, rel.clone()) {
+            if let Some(theta_prime) = unify(rel_head, (*rel).clone()) {
                 debug!("Unification Success");
                 let mut new_goals = VecDeque::new();
-                new_goals.extend(rule.body.clone());
+                new_goals.extend(rule.body);
                 *is_constant = *is_constant &
                     self.ask_goals(&mut new_goals, &mut new_results,
                                    &mut theta.compose(theta_prime), context);
