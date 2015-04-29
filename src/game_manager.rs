@@ -1,3 +1,5 @@
+use regex::Regex;
+
 use time::PreciseTime;
 
 use std::collections::{HashMap, BTreeSet};
@@ -479,7 +481,10 @@ impl RequestParser {
         }
         self.consume('(').unwrap();
         self.consume_whitespace();
-        let r = regex!(r"(?P<relation>\([^)]+\))|(?P<prop>[a-zA-Z0-9_]+)");
+        let r = match Regex::new(r"(?P<relation>\([^)]+\))|(?P<prop>[a-zA-Z0-9_]+)") {
+            Ok(r) => r,
+            Err(e) => panic!("{}", e)
+        };
         let mut moves = Vec::new();
         let remaining_str = &self.s[self.pos..].to_string();
         for cap in r.captures_iter(&remaining_str) {
@@ -514,7 +519,10 @@ impl RequestParser {
     }
 
     fn parse_gdl(&mut self) -> Description {
-        let r = regex!(r"\((.*)\).");
+        let r = match Regex::new(r"\((.*)\).") {
+            Ok(r) => r,
+            Err(e) => panic!("{}", e)
+        };
         let gdl = {
             let caps = r.captures(&self.s[self.pos..]).unwrap();
             assert_eq!(caps.len(), 2);

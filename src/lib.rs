@@ -40,7 +40,6 @@
 
 #![feature(plugin)]
 #![cfg_attr(all(test, feature = "unstable"), feature(test))]
-#![plugin(regex_macros)]
 
 extern crate time;
 extern crate gdl_parser;
