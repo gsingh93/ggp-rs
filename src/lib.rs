@@ -76,7 +76,7 @@ use std::ascii::AsciiExt;
 use game_manager::GameManager;
 
 pub use game_manager::{Game, State};
-pub use gdl::{constants, Move, Role, Score};
+pub use gdl::{Move, Role, Score};
 
 pub type MoveResult<T> = Result<T, Move>;
 
