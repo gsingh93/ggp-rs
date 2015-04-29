@@ -21,3 +21,6 @@ rand = "*"
 unicase = "*"
 lazy_static = "*"
 time = "*"
+
+[features]
+unstable = []
