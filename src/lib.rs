@@ -38,7 +38,7 @@
 //! }
 //! ```
 
-#![feature(std_misc, plugin)]
+#![feature(plugin)]
 #![cfg_attr(all(test, feature = "unstable"), feature(test))]
 #![plugin(regex_macros)]
 
@@ -71,8 +71,8 @@ use hyper::version::HttpVersion;
 
 use std::net::ToSocketAddrs;
 use std::io::{Read, Write};
-use std::ascii::OwnedAsciiExt;
 use std::sync::Mutex;
+use std::ascii::AsciiExt;
 
 use game_manager::GameManager;
 
@@ -150,7 +150,7 @@ impl<P: Player + Sync + Send> Handler for GameHandler<P> {
     fn handle(&self, mut req: Request, mut res: Response<Fresh>) {
         let mut req_str = String::new();
         req.read_to_string(&mut req_str).unwrap();
-        let req_str = req_str.into_ascii_lowercase();
+        let req_str = req_str.to_ascii_lowercase(); // TODO: Avoid allocation
         info!("Got request: {}", req_str);
 
         let response = {
