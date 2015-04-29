@@ -10,7 +10,7 @@ impl Player for LegalPlayer {
         "LegalPlayer".to_string()
     }
 
-    fn select_move(&self, game: &Game) -> Move {
+    fn select_move(&mut self, game: &Game) -> Move {
         let state = game.get_current_state();
         let role = game.get_role();
         let mut moves = game.get_legal_moves(state, role);

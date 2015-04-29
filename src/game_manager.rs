@@ -1,3 +1,5 @@
+use time::PreciseTime;
+
 use std::collections::{HashMap, BTreeSet};
 use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::cell::RefCell;
@@ -5,7 +7,7 @@ use std::cell::RefCell;
 use Player;
 use util::{cross_product, create_does};
 use prover::{Prover, query_builder};
-use gdl::{self, Description, Sentence, Role, Move, Score, Function, Constant};
+use gdl::{self, constants, Description, Sentence, Role, Move, Score, Function, Constant};
 use gdl::Clause::{SentenceClause, RuleClause};
 use gdl::Sentence::{RelSentence, PropSentence};
 use gdl::Term::ConstTerm;
@@ -26,6 +28,7 @@ pub struct Game {
     role: Role,
     start_clock: u32,
     play_clock: u32,
+    move_start_time: PreciseTime,
     cur_state: State,
     init_state: State,
     prover: Prover,
@@ -86,7 +89,8 @@ impl Game {
 
         Game { match_state: Started, roles: roles, role: role, start_clock: start_clock,
                play_clock: play_clock, init_state: init_state.clone(), cur_state: init_state,
-               prover: prover, cache: RefCell::new(Cache::new()) }
+               prover: prover, cache: RefCell::new(Cache::new()),
+               move_start_time: PreciseTime::now() }
     }
 
     fn compute_roles(desc: &Description) -> Vec<Role> {
@@ -202,7 +206,7 @@ impl Game {
 
     /// Gets the next state given state `state` and each players' next move
     pub fn get_next_state(&self, state: &State, moves: &[Move]) -> State {
-        if moves[0] == Move::new(Constant::new("nil").into()) {
+        if moves[0] == *constants::NIL_MOVE {
             return state.clone();
         }
         assert_eq!(moves.len(), self.roles.len());
@@ -232,6 +236,10 @@ impl Game {
     /// Gets the play clock time
     pub fn get_play_clock(&self) -> u32 {
         self.play_clock
+    }
+
+    pub fn move_start_time(&self) -> PreciseTime {
+        self.move_start_time
     }
 
     fn update(&mut self, moves: &[Move]) {
@@ -290,7 +298,7 @@ impl<P: Player> GameManager<P> {
             StopRequest(match_id, moves) => self.handle_stop(match_id, moves),
             InfoRequest => "available".to_string(),
             AbortRequest(match_id) =>
-                self.handle_stop(match_id, vec![Move::new(Constant::new("nil").into())]),
+                self.handle_stop(match_id, vec![constants::NIL_MOVE.clone()]),
             UnknownRequest(req) => panic!("Unknown request: {}", req)
         }
     }
@@ -309,6 +317,7 @@ impl<P: Player> GameManager<P> {
         info!("Handling play request");
         let game = self.games.get_mut(&match_id).expect("Match doesn't exist");
         game.update(&moves);
+        game.move_start_time = PreciseTime::now();
         let m = self.player.select_move(game);
         let mov = m.to_string();
         info!("Sending {}", mov);
@@ -542,7 +551,7 @@ mod test {
             "LegalPlayer".to_string()
         }
 
-        fn select_move(&self, game: &Game) -> Move {
+        fn select_move(&mut self, game: &Game) -> Move {
             let state = game.get_current_state();
             let role = game.get_role();
             let mut moves = game.get_legal_moves(state, role);

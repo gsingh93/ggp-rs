@@ -42,6 +42,7 @@
 #![cfg_attr(test, feature(test))]
 #![plugin(regex_macros)]
 
+extern crate time;
 extern crate gdl_parser;
 extern crate hyper;
 extern crate regex;
@@ -76,17 +77,53 @@ use std::sync::Mutex;
 use game_manager::GameManager;
 
 pub use game_manager::{Game, State};
-pub use gdl::{Move, Role, Score};
+pub use gdl::{constants, Move, Role, Score};
+
+pub type MoveResult<T> = Result<T, Move>;
+
+#[macro_export]
+macro_rules! check_time {
+    ($self_:ident, $game:ident) => (
+        if $game.move_start_time().to(time::PreciseTime::now()) >
+            time::Duration::milliseconds(
+                (1000 * $game.get_start_clock() - $self_.cutoff()) as i64) {
+            return $self_.out_of_time($game);
+        });
+}
+
+#[macro_export]
+macro_rules! check_time_result {
+    ($self_:ident, $game:ident) => (
+        if $game.move_start_time().to(time::PreciseTime::now()) >
+            time::Duration::milliseconds(
+                (1000 * $game.get_start_clock() - $self_.cutoff()) as i64) {
+            return Err($self_.out_of_time($game));
+        });
+}
 
 /// A GGP player
 pub trait Player {
+    /// Returns the name of this player
     fn get_name(&self) -> String;
 
-    fn meta_game(&self, _: &Game) {}
+    /// Called after receiving a `start` message. Used to perform any computation before the start
+    /// of the game.
+    fn meta_game(&mut self, _: &Game) {}
 
-    fn select_move(&self, game: &Game) -> Move;
+    /// Called after receiving a `play` message. Returns a `Move` for this turn.
+    fn select_move(&mut self, game: &Game) -> Move;
 
-    fn stop(&self, _: &Game) {}
+    /// The cutoff for the remaining time for the start or play clock in milliseconds, after which
+    /// `out_of_time` should be called. Note that this function does not call `out_of_time`, but is
+    /// simply used by other functions when deciding whether to call it. Defaults to 500
+    /// milliseconds.
+    fn cutoff(&self) -> u32 { 500 }
+
+    /// Gets a move to play when there is no more time left for computation.
+    fn out_of_time(&mut self, _: &Game) -> Move { unimplemented!() }
+
+    /// Called when a game is finished or aborted
+    fn stop(&mut self, _: &Game) {}
 }
 
 /// Starts a GGP player listening at `host`

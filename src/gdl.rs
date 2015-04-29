@@ -6,7 +6,7 @@ pub use gdl_parser::parse;
 
 #[allow(unused)]
 pub mod constants {
-    use gdl::Constant;
+    use gdl::{Constant, Move};
 
     lazy_static! {
         pub static ref TRUE_CONST: Constant = Constant::new("true");
@@ -15,6 +15,7 @@ pub mod constants {
         pub static ref LEGAL_CONST: Constant = Constant::new("legal");
         pub static ref GOAL_CONST: Constant = Constant::new("goal");
         pub static ref TERMINAL_CONST: Constant = Constant::new("terminal");
+        pub static ref NIL_MOVE: Move = Move::new(Constant::new("nil").into());
     }
 }
 
