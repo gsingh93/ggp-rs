@@ -551,7 +551,48 @@ mod test {
     use Player;
     use super::{GameManager, Game, RequestParser};
     use super::Request::PlayRequest;
-    use gdl::{Move, Constant, Function};
+    use gdl::{Description, Move, Constant, Function, Role};
+    use gdl_parser;
+
+    use std::fs::File;
+    use std::io::Read;
+
+    struct MockServer {
+        start_clock: u32,
+        play_clock: u32,
+        role: Role,
+        desc: Description
+    }
+
+    impl MockServer {
+        fn new(start_clock: u32, play_clock: u32, role: Role, game: &str) -> MockServer {
+            MockServer { start_clock: start_clock, play_clock: play_clock, role: role,
+                             desc: gdl_parser::parse(game) }
+        }
+
+        fn run(&self, mut players: Vec<Box<Player>>) {
+            let mut game = Game::new(self.role.clone(), self.start_clock, self.play_clock,
+                                     self.desc.clone());
+            assert_eq!(players.len(), game.get_roles().len());
+            for player in players.iter_mut() {
+                player.meta_game(&game);
+            }
+
+            let mut moves = vec![Move::new(Constant::new("nil").into())];
+            game.update(&moves);
+            while !game.is_terminal(game.get_current_state()) {
+                moves.clear();
+                for player in players.iter_mut() {
+                    moves.push(player.select_move(&game));
+                }
+                game.update(&moves);
+            }
+
+            for player in players.iter_mut() {
+                player.stop(&game);
+            }
+        }
+    }
 
     struct LegalPlayer;
     impl Player for LegalPlayer {
@@ -566,6 +607,16 @@ mod test {
             assert!(!moves.is_empty());
             moves.swap_remove(0)
         }
+    }
+
+    #[test]
+    fn test_play_tic_tac_toe() {
+        let mut gdl = String::new();
+        File::open("resources/tictactoe.gdl").unwrap().read_to_string(&mut gdl).ok();
+
+        let server = MockServer::new(10, 10, Role::new("white"), &gdl);
+        let players: Vec<Box<Player>> = vec![Box::new(LegalPlayer), Box::new(LegalPlayer)];
+        server.run(players);
     }
 
     #[test]
