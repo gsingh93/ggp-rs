@@ -17,8 +17,8 @@ impl CompDelibPlayer {
     }
 
     fn best_move(&mut self, game: &Game) -> MoveResult<Move> {
-        let cur_state = game.get_current_state();
-        let moves = game.get_legal_moves(cur_state, game.get_role());
+        let cur_state = game.current_state();
+        let moves = game.legal_moves(cur_state, game.role());
         assert!(moves.len() >= 1, "No legal moves");
 
         let mut max = 0;
@@ -48,12 +48,12 @@ impl CompDelibPlayer {
             return Ok(0);
         }
 
-        let cur_state = game.get_next_state(state, moves);
+        let cur_state = game.next_state(state, moves);
         if game.is_terminal(&cur_state) {
-            return Ok(game.get_goal(&cur_state, game.get_role()));
+            return Ok(game.goal(&cur_state, game.role()));
         }
 
-        let moves = game.get_legal_moves(&cur_state, game.get_role());
+        let moves = game.legal_moves(&cur_state, game.role());
         assert!(moves.len() >= 1, "No legal moves");
 
         let mut max = 0;
@@ -72,12 +72,12 @@ impl CompDelibPlayer {
 }
 
 impl Player for CompDelibPlayer {
-    fn get_name(&self) -> String {
+    fn name(&self) -> String {
         "CompDelibPlayer".to_string()
     }
 
     fn select_move(&mut self, game: &Game) -> Move {
-        assert!(game.get_roles().len() == 1,
+        assert!(game.roles().len() == 1,
                 "CompDelibPlayer only works with single player games");
         let m = match self.best_move(&game) {
             Ok(m) => m,

@@ -1,10 +1,15 @@
 //! Contains objects for proving queries about a game description. A description of the algorithms
-//! used can be found [here](http://logic.stanford.edu/ggp/chapters/chapter_13.html). The one
-//! addition in this code is the recursion checking. We check if we are asking about a relation
+//! used can be found [here](http://logic.stanford.edu/ggp/chapters/chapter_13.html).
+//!
+//! One addition in this code is the recursion checking. We check if we are asking about a relation
 //! we have previously asked about but have not received an answer for. In this case, we mark that
 //! this has happened for this relation, return, and continue proving other subgoals. Once the
 //! remaining subgoals have been proved, we return to the marked relation and attempt to prove it
 //! until no new substitutions are found.
+//!
+//! Another addition is the caching. We cache queries we have answered before during the execution
+//! of the algorithm in one cache, and we also cache queries that will never change during the
+//! lifetime of the game in another cache.
 
 use std::collections::{HashSet, HashMap, VecDeque, BTreeSet};
 use std::cell::RefCell;
@@ -210,19 +215,24 @@ impl Prover {
     fn ask_rel(&self, rel: Relation, goals: &mut VecDeque<Literal>,
                results: &mut HashSet<Substitution>, theta: &mut Substitution,
                context: &mut RecursionContext) -> bool {
+        // We use the renamed relation as the key for any hash tables, as this can be used as a
+        // canonical (i.e. unchanging) representation of the query
         let renamed_rel = match VarRenamer::new().rename_sentence(&rel.clone().into()) {
             RelSentence(rel) => rel,
             _ => panic!("Expected relation")
         };
         let renamed_rel = Arc::new(renamed_rel);
 
-
+        // If the answer to this query exists in the fixed cache, return it. Otherwise, check the
+        // normal cache.
         let cache_res = if let Some(sentences) = self.fixed_cache.borrow().get(&rel,
                                                                                &renamed_rel) {
             (Some(sentences), true)
         } else {
-            let true_or_does = rel.name == Constant::new("does")
-                || rel.name == Constant::new("true");
+            // True or does relations can never be constant, as they depend on the moves the player
+            // makes and the state of the game
+            let true_or_does = rel.name == *constants::DOES_CONST
+                || rel.name == *constants::TRUE_CONST;
             if let Some(sentences) = context.cache.get(&rel, &renamed_rel) {
                 (Some(sentences), !true_or_does)
             } else {
@@ -231,7 +241,12 @@ impl Prover {
         };
         let (cached_sentences, mut is_constant) = cache_res;
 
+        // If the answer to our query wasn't cached, we need to find the answer
         let sentences = if cached_sentences.is_none() {
+
+            // If we've already asked about this query but haven't gotten an answer, mark that
+            // this query was called recursively and return any results obtained from the last time
+            // this happened.
             if context.already_asking.contains(&renamed_rel) {
                 debug!("Recursively called {}, backtracking", renamed_rel);
                 context.called_recursively.insert(renamed_rel.clone());
@@ -262,6 +277,9 @@ impl Prover {
                                                             context, &mut is_constant);
             debug!("{} results from unifying {}", new_results.len(), rel);
 
+            // If the query we just asked about was called recursively at some point, we returned
+            // early and did not get all the results. We continuously ask about this query until
+            // we get know new results, at which point we should have all the results.
             if context.called_recursively.contains(&renamed_rel) {
                 debug!("Rehandling {} due to recursive call", renamed_rel);
                 let mut sentence_results = HashSet::with_capacity(new_results.len());
@@ -294,6 +312,8 @@ impl Prover {
                 assert!(context.previous_results.remove(&renamed_rel).is_some());
             }
             assert!(context.already_asking.remove(&renamed_rel));
+            // We only insert into the cache if no query has been asked about recursively,
+            // otherwise we may insert partial results into the cache
             if context.called_recursively.is_empty() {
                 if is_constant {
                     self.fixed_cache.borrow_mut().insert(&rel, renamed_rel.clone(), &new_results);
@@ -329,6 +349,8 @@ impl Prover {
                 RelSentence(r) => r
             };
 
+            // If the unification of the query and the head of a rule is successful, attempt to
+            // prove the body of the rule.
             debug!("Unifying {} and {}", rel_head, rel);
             if let Some(theta_prime) = unify(rel_head, (*rel).clone()) {
                 debug!("Unification Success");
@@ -471,7 +493,7 @@ mod test {
         File::open(filename).unwrap().read_to_string(&mut gdl).ok();
 
         let prover = Prover::new(gdl::parse(&gdl));
-        let init_state = prover.ask(query_builder::init_query(), State::new()).into_state();
+        let init_state = prover.ask(query_builder::init_query(), &State::new()).into_state();
 
         (prover, init_state)
     }
@@ -494,7 +516,7 @@ mod test {
         }
 
         let results = prover.ask(query_builder::legal_query(&Role::new("white")),
-                                 init_state).into_moves();
+                                 &init_state).into_moves();
         let results_len = results.len();
         let results_set: HashSet<Move> = results.into_iter().collect();
         assert_eq!(results_set.len(), results_len);
@@ -512,21 +534,21 @@ mod test {
                    (<= (next (control black)) (true (control red))) \
                    (<= (next (control red)) (true (control black)))";
         let prover = Prover::new(gdl::parse(gdl));
-        let init_state = prover.ask(query_builder::init_query(), State::new()).into_state();
+        let init_state = prover.ask(query_builder::init_query(), &State::new()).into_state();
         let mut props = BTreeSet::new();
         props.insert(
             Relation::new("true",
                           vec![Function::new("control",
                                              vec![Constant::new("black").into()]).into()]).into());
-        assert_eq!(init_state, State { props: props });
-        let next_state = prover.ask(query_builder::next_query(), init_state).into_state();
+        assert_eq!(init_state, State::from_props(props));
+        let next_state = prover.ask(query_builder::next_query(), &init_state).into_state();
 
         let mut props = BTreeSet::new();
         props.insert(
             Relation::new("true",
                           vec![Function::new("control",
                                              vec![Constant::new("red").into()]).into()]).into());
-        assert_eq!(next_state, State { props: props })
+        assert_eq!(next_state, State::from_props(props))
     }
 
     #[test]
@@ -542,22 +564,23 @@ mod test {
                    (<= (next q) (or (does red p) (true q))) \
                    (<= (next s) (or (does black p) (true s)))";
         let prover = Prover::new(gdl::parse(gdl));
-        let mut init_state = prover.ask(query_builder::init_query(), State::new()).into_state();
+        let init_state = prover.ask(query_builder::init_query(), &State::new()).into_state();
         let mut props = BTreeSet::new();
         props.insert(Relation::new(
             "true",
             vec![Function::new("control",
                                vec![Constant::new("black").into()]).into()]).into());
-        assert_eq!(init_state, State { props: props });
+        assert_eq!(init_state, State::from_props(props.clone()));
 
-        init_state.props.insert(
+        props.insert(
             Relation::new("does",
                           vec![Constant::new("red").into(), Constant::new("p").into()]).into());
-        init_state.props.insert(
+        props.insert(
             Relation::new("does",
                           vec![Constant::new("black").into(), Constant::new("p").into()]).into());
 
-        let next_state = prover.ask(query_builder::next_query(), init_state).into_state();
+        let next_state = prover.ask(query_builder::next_query(),
+                                    &State::from_props(props)).into_state();
 
         let mut props = BTreeSet::new();
         props.insert(
@@ -566,7 +589,7 @@ mod test {
                                              vec![Constant::new("red").into()]).into()]).into());
         props.insert(Relation::new("true", vec![Constant::new("q").into()]).into());
         props.insert(Relation::new("true", vec![Constant::new("s").into()]).into());
-        assert_eq!(next_state, State { props: props })
+        assert_eq!(next_state, State::from_props(props))
     }
 
     #[test]
@@ -587,7 +610,7 @@ mod test {
                                    Constant::new(i.to_string()).into()]).into()));
         }
 
-        let results = prover.ask(query_builder::legal_query(&role), init_state).into_moves();
+        let results = prover.ask(query_builder::legal_query(&role), &init_state).into_moves();
         let results_len = results.len();
         let results_set: HashSet<Move> = results.into_iter().collect();
         assert_eq!(results_set.len(), results_len);
@@ -612,7 +635,7 @@ mod test {
                                    Constant::new(i.to_string()).into()]).into()));
         }
 
-        let results = prover.ask(query_builder::legal_query(&role), init_state).into_moves();
+        let results = prover.ask(query_builder::legal_query(&role), &init_state).into_moves();
         let results_len = results.len();
         let results_set: HashSet<Move> = results.into_iter().collect();
         assert_eq!(results_set.len(), results_len);
@@ -626,7 +649,7 @@ mod test {
 
         let mut expected_moves = HashSet::new();
         expected_moves.insert(Move::new(Constant::new("proceed").into()));
-        let results = prover.ask(query_builder::legal_query(&role), init_state).into_moves();
+        let results = prover.ask(query_builder::legal_query(&role), &init_state).into_moves();
         let results_len = results.len();
         let results_set: HashSet<Move> = results.into_iter().collect();
         assert_eq!(results_set.len(), results_len);
@@ -638,9 +661,10 @@ mod test {
 
         use self::test::Bencher;
 
-        use util::create_does;
         use super::construct_prover;
         use super::super::query_builder;
+        use game_manager::State;
+        use util::create_does;
         use gdl::Role;
 
         #[bench]
@@ -649,19 +673,21 @@ mod test {
             let role = Role::new("white");
 
             b.iter(||
-                   prover.ask(query_builder::legal_query(&role), init_state.clone()));
+                   prover.ask(query_builder::legal_query(&role), &init_state));
         }
 
         #[bench]
         fn bench_tictactoe7_next(b: &mut Bencher) {
-            let (prover, mut init_state) = construct_prover("resources/tictactoe7.gdl");
+            let (prover, init_state) = construct_prover("resources/tictactoe7.gdl");
             let role = Role::new("white");
             let m = prover.ask(query_builder::legal_query(&role),
-                               init_state.clone()).into_moves();
-            init_state.props.insert(create_does(&role, &m[0]));
+                               &init_state).into_moves();
+            let mut props = init_state.props().clone();
+            props.insert(create_does(&role, &m[0]));
+            let init_state = State::from_props(props);
 
             b.iter(||
-                   prover.ask(query_builder::next_query(), init_state.clone()));
+                   prover.ask(query_builder::next_query(), &init_state));
         }
 
         #[bench]
@@ -670,7 +696,7 @@ mod test {
             let role = Role::new("robot");
 
             b.iter(||
-                   prover.ask(query_builder::legal_query(&role), init_state.clone()));
+                   prover.ask(query_builder::legal_query(&role), &init_state));
         }
 
         #[bench]
@@ -679,7 +705,7 @@ mod test {
             let role = Role::new("robot");
 
             b.iter(||
-                   prover.ask(query_builder::legal_query(&role), init_state.clone()));
+                   prover.ask(query_builder::legal_query(&role), &init_state));
         }
     }
 }

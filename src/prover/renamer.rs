@@ -36,6 +36,7 @@ impl VarRenamer {
     }
 }
 
+/// A `Visitor` that replaces any variables it visits with a new variable name using a `VarRenamer`
 struct RenamingVisitor<'a> {
     renamer: &'a mut VarRenamer,
     mapping: HashMap<Constant, Constant>

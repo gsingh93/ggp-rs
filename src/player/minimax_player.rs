@@ -10,7 +10,7 @@ pub struct MinimaxPlayer {
 }
 
 impl Player for MinimaxPlayer {
-    fn get_name(&self) -> String {
+    fn name(&self) -> String {
         "MinimaxPlayer".to_string()
     }
 
@@ -33,14 +33,14 @@ impl MinimaxPlayer {
     }
 
     fn best_move(&self, game: &Game) -> Move {
-        let role = game.get_role();
-        let cur_state = game.get_current_state();
-        let moves = game.get_legal_moves(cur_state, role);
+        let role = game.role();
+        let cur_state = game.current_state();
+        let moves = game.legal_moves(cur_state, role);
         assert!(moves.len() >= 1, "No legal moves");
 
         let mut max = 0;
         let mut res = moves[0].clone();
-        let opponent = get_opponent(game, role);
+        let opponent = opponent(game, role);
         for m in moves {
             let score = self.min_score(game, cur_state, &opponent, m.clone());
             if score >= self.max_bound {
@@ -55,14 +55,14 @@ impl MinimaxPlayer {
 
     fn max_score(&self, game: &Game, state: &State, role: &Role) -> Score {
         if game.is_terminal(state) {
-            return game.get_goal(state, game.get_role());
+            return game.goal(state, game.role());
         }
 
-        let moves = game.get_legal_moves(state, role);
+        let moves = game.legal_moves(state, role);
         assert!(moves.len() >= 1, "No legal moves");
 
         let mut max = 0;
-        let opponent = get_opponent(game, role);
+        let opponent = opponent(game, role);
         for m in moves {
             let score = self.min_score(game, state, &opponent, m);
             if score >= self.max_bound {
@@ -75,18 +75,18 @@ impl MinimaxPlayer {
     }
 
     fn min_score(&self, game: &Game, state: &State, role: &Role, last_move: Move) -> Score {
-        let moves = game.get_legal_moves(state, role);
+        let moves = game.legal_moves(state, role);
         assert!(moves.len() >= 1, "No legal moves");
 
         let mut min = 100;
         for m in moves {
-            let move_vec = if game.get_roles()[0] == *role {
+            let move_vec = if game.roles()[0] == *role {
                 vec![m, last_move.clone()]
             } else {
                 vec![last_move.clone(), m]
             };
-            let s = game.get_next_state(state, &*move_vec);
-            let opponent = get_opponent(game, role);
+            let s = game.next_state(state, &*move_vec);
+            let opponent = opponent(game, role);
             let score = self.max_score(game, &s, &opponent);
             if score <= self.min_bound {
                 return score;
@@ -98,8 +98,8 @@ impl MinimaxPlayer {
     }
 }
 
-fn get_opponent(game: &Game, role: &Role) -> Role {
-    let roles = game.get_roles();
+fn opponent(game: &Game, role: &Role) -> Role {
+    let roles = game.roles();
     assert!(roles.len() == 2, "Must be a two player game");
     for r in roles {
         if role != r {

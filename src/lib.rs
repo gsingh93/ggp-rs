@@ -20,14 +20,14 @@
 //! struct RandomPlayer;
 //!
 //! impl Player for RandomPlayer {
-//!     fn get_name(&self) -> String {
+//!     fn name(&self) -> String {
 //!         "RandomPlayer".to_string()
 //!     }
 //!
-//!     fn select_move(&self, game: &Game) -> Move {
-//!         let state = game.get_current_state();
-//!         let role = game.get_role();
-//!         let mut moves = game.get_legal_moves(state, role);
+//!     fn select_move(&mut self, game: &Game) -> Move {
+//!         let state = game.current_state();
+//!         let role = game.role();
+//!         let mut moves = game.legal_moves(state, role);
 //!         let r = rand::random::<usize>() % moves.len();
 //!         moves.swap_remove(r)
 //!     }
@@ -68,7 +68,7 @@ macro_rules! check_time {
     ($self_:ident, $game:ident) => (
         if $game.move_start_time().to(time::PreciseTime::now()) >
             time::Duration::milliseconds(
-                (1000 * $game.get_start_clock() - $self_.cutoff()) as i64) {
+                (1000 * $game.start_clock() - $self_.cutoff()) as i64) {
             return $self_.out_of_time($game);
         });
 }
@@ -80,7 +80,7 @@ macro_rules! check_time_result {
     ($self_:ident, $game:ident) => (
         if $game.move_start_time().to(time::PreciseTime::now()) >
             time::Duration::milliseconds(
-                (1000 * $game.get_start_clock() - $self_.cutoff()) as i64) {
+                (1000 * $game.start_clock() - $self_.cutoff()) as i64) {
             return Err($self_.out_of_time($game));
         });
 }
@@ -116,7 +116,7 @@ pub use gdl::{Move, Role, Score};
 /// A GGP player
 pub trait Player {
     /// Returns the name of this player
-    fn get_name(&self) -> String;
+    fn name(&self) -> String;
 
     /// Called after receiving a `start` message. Used to perform any computation before the start
     /// of the game.

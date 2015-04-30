@@ -191,7 +191,7 @@ mod test {
         let desc = gdl::parse(gdl);
         let prover = Prover::new(desc);
         let moves =
-            prover.ask(query_builder::legal_query(&Role::new("you")), State::new()).into_moves();
+            prover.ask(query_builder::legal_query(&Role::new("you")), &State::new()).into_moves();
         // Without the reordering, there are four legal moves, which is incorrect
         assert_eq!(moves.len(), 2);
     }

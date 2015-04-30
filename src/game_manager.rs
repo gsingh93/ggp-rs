@@ -23,7 +23,10 @@ enum MatchState {
     Started, Playing, Finished
 }
 
-/// A description of a game
+/// A description of a game. The methods of this object use a logic prover to find all true
+/// statements that satisfy a given query (i.e. find all legal moves). Note that queries are
+/// cached, so calling a method that performs a query twice will only pay for any necessary
+/// clones, another query will not be performed.
 pub struct Game {
     match_state: MatchState,
     roles: Vec<Role>,
@@ -139,27 +142,27 @@ impl Game {
     }
 
     /// Returns the roles of the game
-    pub fn get_roles(&self) -> &Vec<Role> {
+    pub fn roles(&self) -> &Vec<Role> {
         &self.roles
     }
 
     /// Returns role of the player
-    pub fn get_role(&self) -> &Role {
+    pub fn role(&self) -> &Role {
         &self.role
     }
 
     /// Returns the initial state of the game
-    pub fn get_initial_state(&self) -> &State {
+    pub fn initial_state(&self) -> &State {
         &self.init_state
     }
 
     /// Returns the current state of the game
-    pub fn get_current_state(&self) -> &State {
+    pub fn current_state(&self) -> &State {
         &self.cur_state
     }
 
     /// Returns all legal moves for role `role` in the state `state`
-    pub fn get_legal_moves(&self, state: &State, role: &Role) -> Vec<Move> {
+    pub fn legal_moves(&self, state: &State, role: &Role) -> Vec<Move> {
         let mut cache = self.cache.borrow_mut();
         let mut entry = cache.get(state);
         match entry.legals.entry(role.clone()) {
@@ -175,26 +178,26 @@ impl Game {
 
     /// Returns all legal joint moves in state `state`. Each element of the resulting vector is a
     /// vector that contains a legal move for each player in the game.
-    pub fn get_legal_joint_moves(&self, state: &State) -> Vec<Vec<Move>> {
+    pub fn legal_joint_moves(&self, state: &State) -> Vec<Vec<Move>> {
         let mut legal_moves = Vec::new();
         for role in self.roles.iter() {
-            legal_moves.push(self.get_legal_moves(state, role));
+            legal_moves.push(self.legal_moves(state, role));
         }
 
         cross_product(legal_moves)
     }
 
     /// Returns the score for each player in state `state`
-    pub fn get_goals(&self, state: &State) -> Vec<Score> {
+    pub fn goals(&self, state: &State) -> Vec<Score> {
         let mut res = Vec::new();
         for role in self.roles.iter() {
-            res.push(self.get_goal(state, role))
+            res.push(self.goal(state, role))
         }
         res
     }
 
     /// Returns the score for role `role` in state `state`
-    pub fn get_goal(&self, state: &State, role: &Role) -> Score {
+    pub fn goal(&self, state: &State, role: &Role) -> Score {
         let mut cache = self.cache.borrow_mut();
         let mut entry = cache.get(state);
         match entry.goals.entry(role.clone()) {
@@ -209,17 +212,18 @@ impl Game {
     }
 
     /// Gets all possible next states given state `state`
-    pub fn get_next_states(&self, state: &State) -> Vec<State> {
+    pub fn next_states(&self, state: &State) -> Vec<State> {
         let mut res = Vec::new();
-        for moves in self.get_legal_joint_moves(state) {
-            res.push(self.get_next_state(state, &moves));
+        for moves in self.legal_joint_moves(state) {
+            res.push(self.next_state(state, &moves));
         }
         res
     }
 
     /// Gets the next state given state `state` and each players' next move
-    pub fn get_next_state(&self, state: &State, moves: &[Move]) -> State {
+    pub fn next_state(&self, state: &State, moves: &[Move]) -> State {
         if moves[0] == *constants::NIL_MOVE {
+            assert_eq!(moves.len(), 1);
             return state.clone();
         }
         assert_eq!(moves.len(), self.roles.len());
@@ -242,12 +246,12 @@ impl Game {
     }
 
     /// Gets the start clock time
-    pub fn get_start_clock(&self) -> u32 {
+    pub fn start_clock(&self) -> u32 {
         self.start_clock
     }
 
     /// Gets the play clock time
-    pub fn get_play_clock(&self) -> u32 {
+    pub fn play_clock(&self) -> u32 {
         self.play_clock
     }
 
@@ -260,7 +264,7 @@ impl Game {
         if self.match_state != Playing {
             self.match_state = Playing;
         }
-        let new_state = self.get_next_state(&self.cur_state, moves);
+        let new_state = self.next_state(&self.cur_state, moves);
         if cfg!(debug_assertions) {
             let old_props: Vec<_> =
                 self.cur_state.props.difference(&new_state.props).cloned().collect();
@@ -276,7 +280,7 @@ impl Game {
     }
 
     fn finish(&mut self, moves: &[Move]) {
-        self.cur_state = self.get_next_state(&self.cur_state, moves);
+        self.cur_state = self.next_state(&self.cur_state, moves);
         self.match_state = Finished;
     }
 }
@@ -585,14 +589,14 @@ mod test {
         fn run(&self, mut players: Vec<Box<Player>>) {
             let mut game = Game::new(self.role.clone(), self.start_clock, self.play_clock,
                                      self.desc.clone());
-            assert_eq!(players.len(), game.get_roles().len());
+            assert_eq!(players.len(), game.roles().len());
             for player in players.iter_mut() {
                 player.meta_game(&game);
             }
 
             let mut moves = vec![Move::new(Constant::new("nil").into())];
             game.update(&moves);
-            while !game.is_terminal(game.get_current_state()) {
+            while !game.is_terminal(game.current_state()) {
                 moves.clear();
                 for player in players.iter_mut() {
                     moves.push(player.select_move(&game));
@@ -608,14 +612,14 @@ mod test {
 
     struct LegalPlayer;
     impl Player for LegalPlayer {
-        fn get_name(&self) -> String {
+        fn name(&self) -> String {
             "LegalPlayer".to_string()
         }
 
         fn select_move(&mut self, game: &Game) -> Move {
-            let state = game.get_current_state();
-            let role = game.get_role();
-            let mut moves = game.get_legal_moves(state, role);
+            let state = game.current_state();
+            let role = game.role();
+            let mut moves = game.legal_moves(state, role);
             assert!(!moves.is_empty());
             moves.swap_remove(0)
         }
