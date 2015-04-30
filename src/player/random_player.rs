@@ -4,7 +4,9 @@ use Player;
 use game_manager::Game;
 use gdl::Move;
 
+/// A player that chooses a random move from all possible of legal moves
 pub struct RandomPlayer;
+
 impl Player for RandomPlayer {
     fn get_name(&self) -> String {
         "RandomPlayer".to_string()

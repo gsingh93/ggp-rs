@@ -6,8 +6,8 @@ use gdl::{Move, Score, Role};
 
 use std::cmp::{max, min};
 
-// An alpha beta search player with a bounded depth. This player should only be used for 2 player,
-// constant sum, turn based games.
+/// An alpha beta search player with a bounded depth. This player should only be used for 2 player,
+/// constant sum, turn based games.
 pub struct AlphaBetaPlayer {
     depth_limit: u32,
     best_move: Option<Move>

@@ -74,12 +74,23 @@ impl CacheEntry {
 /// The state of a game, containing all `Sentence`s that are true in this state
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct State {
-    pub props: BTreeSet<Sentence>
+    props: BTreeSet<Sentence>
 }
 
 impl State {
+    /// Create a new, empty state
     pub fn new() -> State {
         State { props: BTreeSet::new() }
+    }
+
+    /// Create a state containing the given propositions
+    pub fn from_props(props: BTreeSet<Sentence>) -> State {
+        State { props: props }
+    }
+
+    /// Returns the propositions that are true in this state
+    pub fn props(&self) -> &BTreeSet<Sentence> {
+        &self.props
     }
 }
 
@@ -87,7 +98,7 @@ impl Game {
     fn new(role: Role, start_clock: u32, play_clock: u32, desc: Description) -> Game {
         let roles = Game::compute_roles(&desc);
         let prover = Prover::new(desc);
-        let init_state = prover.ask(query_builder::init_query(), State::new()).into_state();
+        let init_state = prover.ask(query_builder::init_query(), &State::new()).into_state();
 
         Game { match_state: Started, roles: roles, role: role, start_clock: start_clock,
                play_clock: play_clock, init_state: init_state.clone(), cur_state: init_state,
@@ -120,7 +131,7 @@ impl Game {
         match entry.terminal {
             Some(b) => b,
             None => {
-                let res = self.prover.prove(query_builder::terminal_query(), state.clone());
+                let res = self.prover.prove(query_builder::terminal_query(), state);
                 entry.terminal = Some(res);
                 res
             }
@@ -155,7 +166,7 @@ impl Game {
             Occupied(e) => e.get().clone(),
             Vacant(e) => {
                 let res = self.prover.ask(query_builder::legal_query(role),
-                                          state.clone()).into_moves();
+                                          state).into_moves();
                 e.insert(res.clone());
                 res
             }
@@ -190,7 +201,7 @@ impl Game {
             Occupied(e) => e.get().clone(),
             Vacant(e) => {
                 let res = self.prover.ask(query_builder::goal_query(role),
-                                          state.clone()).into_score();
+                                          state).into_score();
                 e.insert(res.clone());
                 res
             }
@@ -223,7 +234,7 @@ impl Game {
                     s.props.insert(create_does(r, m));
                 }
 
-                let res = self.prover.ask(query_builder::next_query(), s).into_state();
+                let res = self.prover.ask(query_builder::next_query(), &s).into_state();
                 e.insert(res.clone());
                 res
             }
@@ -240,6 +251,7 @@ impl Game {
         self.play_clock
     }
 
+    /// Gets the `PreciseTime` at which the current move started.
     pub fn move_start_time(&self) -> PreciseTime {
         self.move_start_time
     }

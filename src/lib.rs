@@ -38,6 +38,7 @@
 //! }
 //! ```
 
+#![deny(missing_docs)]
 #![feature(plugin)]
 #![cfg_attr(all(test, feature = "unstable"), feature(test))]
 
@@ -53,6 +54,15 @@ extern crate log;
 #[macro_use]
 extern crate lazy_static;
 
+/// This type meant to be used in GGP players for returning a move when time runs out. For
+/// functions that would normally have a return type `T`, you can return a `MoveResult<T>` instead.
+/// On normal execution, an `Ok(T)` can be returned, and when out of time an `Err(Move)` can
+/// be returned. You can implement this logic yourself or just use the provided
+/// `check_time_result!` macro.
+pub type MoveResult<T> = Result<T, Move>;
+
+/// Checks whether we are out of time, and if so, returns the move selected by
+/// `Player::out_of_time`.
 #[macro_export]
 macro_rules! check_time {
     ($self_:ident, $game:ident) => (
@@ -63,6 +73,8 @@ macro_rules! check_time {
         });
 }
 
+/// Checks whether we are out of time, and if so, returns the move selected by
+/// `Player::out_of_time` wrapped in a `MoveResult`.
 #[macro_export]
 macro_rules! check_time_result {
     ($self_:ident, $game:ident) => (
@@ -73,6 +85,7 @@ macro_rules! check_time_result {
         });
 }
 
+/// Ready to use GGP players
 pub mod player;
 
 mod util;
@@ -100,8 +113,6 @@ use game_manager::GameManager;
 pub use game_manager::{Game, State};
 pub use gdl::{Move, Role, Score};
 
-pub type MoveResult<T> = Result<T, Move>;
-
 /// A GGP player
 pub trait Player {
     /// Returns the name of this player
@@ -120,7 +131,11 @@ pub trait Player {
     /// milliseconds.
     fn cutoff(&self) -> u32 { 500 }
 
-    /// Gets a move to play when there is no more time left for computation.
+    /// Gets a move to play when there is no more time left for computation. While it is not
+    /// required that clients implement this function to use the `Player` trait, the default
+    /// implementation will panic. This is so players that do not want to use this feature can
+    /// ignore it. Instead of calling this function directly, you can use the `check_time!` and
+    /// `check_time_result!` macros.
     fn out_of_time(&mut self, _: &Game) -> Move { unimplemented!() }
 
     /// Called when a game is finished or aborted

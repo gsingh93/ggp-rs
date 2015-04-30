@@ -103,10 +103,10 @@ impl RuleMap {
         RuleMap { map: rule_map }
     }
 
-    fn from_state(state: State) -> RuleMap {
+    fn from_state(state: &State) -> RuleMap {
         let mut trues = Vec::new();
         let mut does = Vec::new();
-        for s in state.props {
+        for s in state.props().iter().cloned() {
             if *s.name() == *constants::TRUE_CONST {
                 trues.push(Arc::new(s.into()))
             } else if *s.name() == *constants::DOES_CONST {
@@ -146,13 +146,13 @@ impl Prover {
                  fixed_cache: RefCell::new(Cache::new()) }
     }
 
-    // Ask whether the query `query` is true in the state `state`
-    pub fn prove(&self, query: Sentence, state: State) -> bool {
+    /// Ask whether the query `query` is true in the state `state`
+    pub fn prove(&self, query: Sentence, state: &State) -> bool {
         !self.ask(query, state).props.is_empty()
     }
 
-    // Ask whether the query `query` is true in the state `state`
-    pub fn ask(&self, query: Sentence, state: State) -> QueryResult {
+    /// Ask whether the query `query` is true in the state `state`
+    pub fn ask(&self, query: Sentence, state: &State) -> QueryResult {
         let mut goals = VecDeque::new();
         let query: Literal = query.into();
         goals.push_front(query.clone());
@@ -397,7 +397,7 @@ impl QueryResult {
                 _ => panic!("Expected RelSentence")
             }
         }
-        State { props: trues }
+        State::from_props(trues)
     }
 
     pub fn into_moves(self) -> Vec<Move> {

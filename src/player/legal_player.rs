@@ -2,7 +2,9 @@ use Player;
 use game_manager::Game;
 use gdl::Move;
 
+/// A player that returns the first legal move it finds
 pub struct LegalPlayer;
+
 impl Player for LegalPlayer {
     fn get_name(&self) -> String {
         "LegalPlayer".to_string()

@@ -22,27 +22,33 @@ pub mod constants {
 /// The score a player can get at a goal state
 pub type Score = u8;
 
+/// A role in a game
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Role {
     name: String
 }
 
 impl Role {
+    /// Constructs a new `Role` with the name `name`
     pub fn new<T: Into<String>>(name: T) -> Role {
         Role { name: name.into() }
     }
 
+    /// Returns the name of the role
     pub fn name(&self) -> &str {
         &self.name
     }
 }
 
+/// A move in a game
 #[derive(Clone, Eq, PartialEq, Hash)]
 pub struct Move {
+    #[doc(hidden)]
     pub contents: Term
 }
 
 impl Move {
+    #[doc(hidden)]
     pub fn new(t: Term) -> Move {
         Move { contents: t }
     }
