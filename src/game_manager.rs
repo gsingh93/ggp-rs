@@ -570,6 +570,7 @@ mod test {
     use gdl_parser;
     use player::LegalPlayer;
 
+    #[allow(dead_code)]
     struct MockServer {
         start_clock: u32,
         play_clock: u32,
@@ -577,13 +578,13 @@ mod test {
         desc: Description
     }
 
+    #[allow(dead_code)]
     impl MockServer {
         fn new(start_clock: u32, play_clock: u32, role: Role, game: &str) -> MockServer {
             MockServer { start_clock: start_clock, play_clock: play_clock, role: role,
                          desc: gdl_parser::parse(game) }
         }
 
-        #[allow(dead_code)]
         fn run_to_end(&self, mut players: Vec<Box<Player>>) {
             let mut game = Game::new(self.role.clone(), self.start_clock, self.play_clock,
                                      self.desc.clone());

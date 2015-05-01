@@ -22,8 +22,12 @@ impl AlphaBetaPlayer {
     fn best_move(&mut self, game: &Game) -> MoveResult<Move> {
         let role = game.role();
         let cur_state = game.current_state();
-        let moves = game.legal_moves(cur_state, role);
+        let mut moves = game.legal_moves(cur_state, role);
         assert!(moves.len() >= 1, "No legal moves");
+
+        if moves.len() == 1 {
+            return Ok(moves.swap_remove(0));
+        }
 
         let mut max = 0;
         let mut res = moves[0].clone();
@@ -48,11 +52,12 @@ impl AlphaBetaPlayer {
 
     fn max_score(&mut self, game: &Game, state: &State, role: &Role, alpha: u8, beta: u8,
                  depth: u32) -> MoveResult<Score> {
-        if game.is_terminal(state) {
+        if depth >= self.depth_limit {
             return Ok(game.goal(state, game.role()));
         }
-        if depth >= self.depth_limit {
-            return Ok(0);
+
+        if game.is_terminal(state) {
+            return Ok(game.goal(state, game.role()));
         }
 
         let moves = game.legal_moves(state, role);

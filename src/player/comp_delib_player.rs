@@ -18,8 +18,12 @@ impl CompDelibPlayer {
 
     fn best_move(&mut self, game: &Game) -> MoveResult<Move> {
         let cur_state = game.current_state();
-        let moves = game.legal_moves(cur_state, game.role());
+        let mut moves = game.legal_moves(cur_state, game.role());
         assert!(moves.len() >= 1, "No legal moves");
+
+        if moves.len() == 1 {
+            return Ok(moves.swap_remove(0));
+        }
 
         let mut max = 0;
         let mut res = moves[0].clone();
@@ -45,7 +49,7 @@ impl CompDelibPlayer {
     fn max_score(&mut self, game: &Game, state: &State, moves: &[Move],
                  depth: u32) -> MoveResult<Score> {
         if depth > self.depth_limit {
-            return Ok(0);
+            return Ok(game.goal(state, game.role()));
         }
 
         let cur_state = game.next_state(state, moves);
