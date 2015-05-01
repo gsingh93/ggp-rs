@@ -563,15 +563,12 @@ impl RequestParser {
 
 #[cfg(test)]
 mod test {
-    extern crate env_logger;
     use Player;
     use super::{GameManager, Game, RequestParser};
     use super::Request::PlayRequest;
     use gdl::{Description, Move, Constant, Function, Role};
     use gdl_parser;
-
-    use std::fs::File;
-    use std::io::Read;
+    use player::LegalPlayer;
 
     struct MockServer {
         start_clock: u32,
@@ -583,10 +580,11 @@ mod test {
     impl MockServer {
         fn new(start_clock: u32, play_clock: u32, role: Role, game: &str) -> MockServer {
             MockServer { start_clock: start_clock, play_clock: play_clock, role: role,
-                             desc: gdl_parser::parse(game) }
+                         desc: gdl_parser::parse(game) }
         }
 
-        fn run(&self, mut players: Vec<Box<Player>>) {
+        #[allow(dead_code)]
+        fn run_to_end(&self, mut players: Vec<Box<Player>>) {
             let mut game = Game::new(self.role.clone(), self.start_clock, self.play_clock,
                                      self.desc.clone());
             assert_eq!(players.len(), game.roles().len());
@@ -608,31 +606,31 @@ mod test {
                 player.stop(&game);
             }
         }
-    }
 
-    struct LegalPlayer;
-    impl Player for LegalPlayer {
-        fn name(&self) -> String {
-            "LegalPlayer".to_string()
+        fn run_n_moves(&self, mut players: Vec<Box<Player>>, num_moves: u8) {
+            let mut game = Game::new(self.role.clone(), self.start_clock, self.play_clock,
+                                     self.desc.clone());
+            assert_eq!(players.len(), game.roles().len());
+            for player in players.iter_mut() {
+                player.meta_game(&game);
+            }
+
+            let mut moves = vec![Move::new(Constant::new("nil").into())];
+            game.update(&moves);
+            let mut i = 0;
+            while !game.is_terminal(game.current_state()) && i != num_moves {
+                moves.clear();
+                for player in players.iter_mut() {
+                    moves.push(player.select_move(&game));
+                }
+                game.update(&moves);
+                i += 1;
+            }
+
+            for player in players.iter_mut() {
+                player.stop(&game);
+            }
         }
-
-        fn select_move(&mut self, game: &Game) -> Move {
-            let state = game.current_state();
-            let role = game.role();
-            let mut moves = game.legal_moves(state, role);
-            assert!(!moves.is_empty());
-            moves.swap_remove(0)
-        }
-    }
-
-    #[test]
-    fn test_play_tic_tac_toe() {
-        let mut gdl = String::new();
-        File::open("resources/tictactoe.gdl").unwrap().read_to_string(&mut gdl).ok();
-
-        let server = MockServer::new(10, 10, Role::new("white"), &gdl);
-        let players: Vec<Box<Player>> = vec![Box::new(LegalPlayer), Box::new(LegalPlayer)];
-        server.run(players);
     }
 
     #[test]
@@ -647,7 +645,6 @@ mod test {
 
     #[test]
     fn test_play_turns() {
-        env_logger::init().unwrap();
         let mut gm = GameManager::new(LegalPlayer);
         assert_eq!(
             &gm.handle("(start match_id black ((role black) (role red) \
@@ -676,5 +673,32 @@ mod test {
                                                           Constant::new("1").into()]).into()),
                                         Move::new(Constant::new("noop").into())]);
         assert_eq!(parser.parse(), expected);
+    }
+
+    #[cfg(feature = "unstable")]
+    mod bench {
+        extern crate test;
+        use self::test::Bencher;
+
+        use super::MockServer;
+        use Player;
+        use player::{LegalPlayer, AlphaBetaPlayer};
+        use gdl::Role;
+
+        use std::fs::File;
+        use std::io::Read;
+
+        #[bench]
+        fn bench_tictactoe_heuristic(b: &mut Bencher) {
+            let mut gdl = String::new();
+            File::open("resources/tictactoe.gdl").unwrap().read_to_string(&mut gdl).ok();
+
+            let server = MockServer::new(10, 10, Role::new("white"), &gdl);
+            b.iter(|| {
+                let players: Vec<Box<Player>> = vec![Box::new(AlphaBetaPlayer::new(3)),
+                                                     Box::new(LegalPlayer)];
+                server.run_n_moves(players, 1);
+            });
+        }
     }
 }
