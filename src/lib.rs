@@ -113,7 +113,7 @@ pub use game_manager::{Game, State};
 pub use gdl::{Move, Role, Score};
 
 /// A GGP player
-pub trait Player {
+pub trait Player: Sync + Send {
     /// Returns the name of this player
     fn name(&self) -> String;
 
