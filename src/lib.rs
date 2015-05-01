@@ -39,7 +39,6 @@
 //! ```
 
 #![deny(missing_docs)]
-#![feature(plugin)]
 #![cfg_attr(all(test, feature = "unstable"), feature(test))]
 
 extern crate time;

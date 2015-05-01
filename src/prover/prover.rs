@@ -656,6 +656,7 @@ mod test {
         assert_eq!(results_set, expected_moves);
     }
 
+    #[cfg(feature = "unstable")]
     mod bench {
         extern crate test;
 
