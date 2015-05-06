@@ -67,7 +67,7 @@ macro_rules! check_time {
     ($self_:ident, $game:ident) => (
         if $game.move_start_time().to(time::PreciseTime::now()) >
             time::Duration::milliseconds(
-                (1000 * $game.start_clock() - $self_.cutoff()) as i64) {
+                (1000 * $game.play_clock() - $self_.cutoff()) as i64) {
             return $self_.out_of_time($game);
         });
 }
@@ -79,7 +79,7 @@ macro_rules! check_time_result {
     ($self_:ident, $game:ident) => (
         if $game.move_start_time().to(time::PreciseTime::now()) >
             time::Duration::milliseconds(
-                (1000 * $game.start_clock() - $self_.cutoff()) as i64) {
+                (1000 * $game.play_clock() - $self_.cutoff()) as i64) {
             return Err($self_.out_of_time($game));
         });
 }
