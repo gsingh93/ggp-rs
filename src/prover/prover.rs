@@ -120,7 +120,7 @@ impl RuleMap {
                 panic!("State contains something other than `true` and `does`");
             }
         }
-        if cfg!(not(ndebug)) {
+        if cfg!(debug_assertions) {
             let state_str: Vec<_> =
                 trues.iter().chain(does.iter()).map(|x: &Arc<Rule>| x.head.to_string()).collect();
             debug!("state: {:?}", state_str);
@@ -158,6 +158,7 @@ impl Prover {
 
     /// Ask whether the query `query` is true in the state `state`
     pub fn ask(&self, query: Sentence, state: &State) -> QueryResult {
+        debug!("Beginning unification of query {}", query);
         let mut goals = VecDeque::new();
         let query: Literal = query.into();
         goals.push_front(query.clone());
@@ -225,8 +226,8 @@ impl Prover {
 
         // If the answer to this query exists in the fixed cache, return it. Otherwise, check the
         // normal cache.
-        let cache_res = if let Some(sentences) = self.fixed_cache.borrow().get(&rel,
-                                                                               &renamed_rel) {
+        let cache_res =
+            if let Some(sentences) = self.fixed_cache.borrow().get(&rel, &renamed_rel) {
             (Some(sentences), true)
         } else {
             // True or does relations can never be constant, as they depend on the moves the player
@@ -234,7 +235,7 @@ impl Prover {
             let true_or_does = rel.name == *constants::DOES_CONST
                 || rel.name == *constants::TRUE_CONST;
             if let Some(sentences) = context.cache.get(&rel, &renamed_rel) {
-                (Some(sentences), !true_or_does)
+                (Some(sentences), false)
             } else {
                 (None, !true_or_does)
             }
@@ -316,6 +317,7 @@ impl Prover {
             // otherwise we may insert partial results into the cache
             if context.called_recursively.is_empty() {
                 if is_constant {
+                    debug!("Inserting {} into fixed cache", rel);
                     self.fixed_cache.borrow_mut().insert(&rel, renamed_rel.clone(), &new_results);
                 } else {
                     context.cache.insert(&rel, renamed_rel.clone(), &new_results);
@@ -323,6 +325,8 @@ impl Prover {
             }
             new_results
         } else {
+            debug!("Found relation {} in cache, {} unification results", rel,
+                   cached_sentences.as_ref().unwrap().len());
             cached_sentences.unwrap()
         };
 
@@ -337,7 +341,7 @@ impl Prover {
                             candidates: &HashSet<Arc<Rule>>, context: &mut RecursionContext,
                             is_constant: &mut bool) -> HashSet<Substitution> {
         let mut new_results = HashSet::new();
-        debug!("{} candidates found for unification", candidates.len());
+        debug!("{} candidates found for unification with {}", candidates.len(), rel);
         if cfg!(debug_assertions) {
             let candidate_str: Vec<_> = candidates.iter().map(|x| x.to_string()).collect();
             debug!("Possible candidates: {:?}", candidate_str);
@@ -351,9 +355,14 @@ impl Prover {
 
             // If the unification of the query and the head of a rule is successful, attempt to
             // prove the body of the rule.
-            debug!("Unifying {} and {}", rel_head, rel);
+            debug!("Unifying {} and {}", rel, rel_head);
             if let Some(theta_prime) = unify(rel_head, (*rel).clone()) {
-                debug!("Unification Success");
+                debug!("Unification Success, need to prove {} new goals", rule.body.len());
+                if cfg!(debug_assertions) {
+                    let goal_str: Vec<String> = rule.body.iter().map(|x| x.to_string()).collect();
+                    debug!("New goals: {:?}", goal_str);
+                }
+
                 let mut new_goals = VecDeque::new();
                 new_goals.extend(rule.body);
                 *is_constant = *is_constant &
@@ -364,6 +373,7 @@ impl Prover {
                 debug!("Unification failure");
             }
         }
+        debug!("Finished attempting unification with {}, {} new results", rel, new_results.len());
         new_results
     }
 

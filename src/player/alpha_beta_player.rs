@@ -6,8 +6,8 @@ use gdl::{Move, Score, Role};
 
 use std::cmp::{max, min};
 
-/// An alpha beta search player with a bounded depth. This player should only be used for 2 player,
-/// constant sum, turn based games.
+/// An alpha beta search player with a bounded depth. This player should only be used for 2 player
+/// games.
 pub struct AlphaBetaPlayer {
     depth_limit: u32,
     best_move: Option<Move>
@@ -61,7 +61,7 @@ impl AlphaBetaPlayer {
         }
 
         let moves = game.legal_moves(state, role);
-        assert!(moves.len() >= 1, "No legal moves");
+        assert!(!moves.is_empty(), "No legal moves");
 
         let opponent = opponent(game, role);
         let mut alpha = alpha;
@@ -83,7 +83,7 @@ impl AlphaBetaPlayer {
     fn min_score(&mut self, game: &Game, state: &State, role: &Role, last_move: Move, alpha: u8,
                  beta: u8, depth: u32) -> MoveResult<Score> {
         let moves = game.legal_moves(state, role);
-        assert!(moves.len() >= 1, "No legal moves");
+        assert!(!moves.is_empty(), "No legal moves");
 
         let mut beta = beta;
         for m in moves {
@@ -131,10 +131,7 @@ impl Player for AlphaBetaPlayer {
 fn opponent(game: &Game, role: &Role) -> Role {
     let roles = game.roles();
     assert!(roles.len() == 2, "Must be a two player game");
-    for r in roles {
-        if role != r {
-            return (*r).clone();
-        }
-    }
-    panic!("Shouldn't happen");
+    let res: Vec<_> = roles.into_iter().filter(|r| *r != role).collect();
+    assert_eq!(res.len(), 1);
+    res[0].clone()
 }
