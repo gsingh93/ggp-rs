@@ -343,7 +343,19 @@ impl<P: Player> GameManager<P> {
 
     fn handle_play(&mut self, match_id: String, moves: Vec<Move>) -> String {
         info!("Handling play request");
-        let game = self.games.get_mut(&match_id).expect("Match doesn't exist");
+        let game = match self.games.get_mut(&match_id) {
+            Some(game) => game,
+            None => {
+                warn!("Match {} doesn't exist, sending 'busy'", match_id);
+                return "busy".to_string();
+            }
+        };
+
+        if game.match_state == Finished {
+            warn!("Match {} is finished, sending 'busy'", match_id);
+            return "busy".to_string();
+        }
+
         game.update(&moves);
         game.move_start_time = PreciseTime::now();
         let m = self.player.select_move(game);
@@ -354,7 +366,10 @@ impl<P: Player> GameManager<P> {
 
     fn handle_stop(&mut self, match_id: String, moves: Vec<Move>) -> String {
         info!("Handling stop request");
-        let game = self.games.get_mut(&match_id).expect("Match doesn't exist");
+        let game = match self.games.get_mut(&match_id) {
+            Some(game) => game,
+            None => { warn!("Match doesn't exist, sending 'busy'"); return "busy".to_string() }
+        };
         game.finish(&moves);
         self.player.stop(game);
         info!("Sending 'done'");
