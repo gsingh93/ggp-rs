@@ -213,6 +213,11 @@ impl Prover {
         self.ask_rel(prop.into(), goals, results, theta, context)
     }
 
+    // I apologize to any readers of this code for the monstrosity they are about to read. This
+    // function combines recursion checking, two types of caching, and relation querying all in
+    // one monolithic function. I've described the general algorithm at the top, and I've added
+    // line comments in the function, but none of that is a sufficient excuse for the following
+    // code.
     fn ask_rel(&self, rel: Relation, goals: &mut VecDeque<Literal>,
                results: &mut HashSet<Substitution>, theta: &mut Substitution,
                context: &mut RecursionContext) -> bool {

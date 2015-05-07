@@ -25,7 +25,7 @@ impl McsPlayer {
         let role = game.role();
         let cur_state = game.current_state();
         let mut moves = game.legal_moves(cur_state, role);
-        assert!(moves.len() >= 1, "No legal moves");
+        assert!(!moves.is_empty(), "No legal moves");
 
         if moves.len() == 1 {
             return Ok(moves.swap_remove(0));
@@ -57,7 +57,7 @@ impl McsPlayer {
     fn max_score(&mut self, game: &Game, state: &State, role: &Role, alpha: u8, beta: u8,
                  depth: u32) -> MoveResult<Score> {
         if depth >= self.depth_limit {
-            return Ok(self.monte_carlo(role, game, state));
+            return self.monte_carlo(role, game, state);
         }
 
         if game.is_terminal(state) {
@@ -65,7 +65,7 @@ impl McsPlayer {
         }
 
         let moves = game.legal_moves(state, role);
-        assert!(moves.len() >= 1, "No legal moves");
+        assert!(!moves.is_empty(), "No legal moves");
 
         let opponent = opponent(game, role);
         let mut alpha = alpha;
@@ -111,27 +111,32 @@ impl McsPlayer {
         Ok(beta)
     }
 
-    fn monte_carlo(&self, role: &Role, game: &Game, state: &State) -> Score {
+    fn monte_carlo(&mut self, role: &Role, game: &Game, state: &State) -> MoveResult<Score> {
         let mut total: u32 = 0;
         for _ in 0..self.charge_count {
-            total += self.depth_charge(role, game, state) as u32;
+            match self.depth_charge(role, game, state) {
+                Ok(res) => total += res as u32,
+                Err(e) => return Err(e)
+            }
         }
-        (total / self.charge_count) as u8
+        Ok((total / self.charge_count) as u8)
     }
 
-    fn depth_charge(&self, role: &Role, game: &Game, state: &State) -> Score {
+    fn depth_charge(&mut self, role: &Role, game: &Game, state: &State) -> MoveResult<Score> {
         let mut new_state = state.clone();
+        let mut moves = Vec::with_capacity(game.roles().len());
         while !game.is_terminal(&new_state) {
-            let mut moves = Vec::with_capacity(game.roles().len());
-            for r in game.roles() {
-                let mut legals = game.legal_moves(state, r);
+            moves.clear();
+            for r in game.roles().into_iter() {
+                let mut legals = game.legal_moves(&new_state, r);
                 let r = rand::random::<usize>() % legals.len();
                 moves.push(legals.swap_remove(r));
             }
 
             new_state = game.next_state(&new_state, &moves);
+            check_time_result!(self, game);
         }
-        return game.goal(state, role);
+        return Ok(game.goal(state, role));
     }
 }
 

@@ -2,6 +2,7 @@ use regex::Regex;
 
 use time::PreciseTime;
 
+use std::fmt::{self, Display, Formatter};
 use std::collections::{HashMap, BTreeSet};
 use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::cell::RefCell;
@@ -78,6 +79,15 @@ impl CacheEntry {
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct State {
     props: BTreeSet<Sentence>
+}
+
+impl Display for State {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        for p in self.props.iter() {
+           try!(write!(f, "{} ", p));
+        }
+        Ok(())
+    }
 }
 
 impl State {
