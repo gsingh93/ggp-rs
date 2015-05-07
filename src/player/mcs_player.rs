@@ -1,4 +1,5 @@
 extern crate time;
+extern crate rand;
 
 use {Player, MoveResult};
 use game_manager::{Game, State};
@@ -6,17 +7,18 @@ use gdl::{Move, Score, Role};
 
 use std::cmp::{max, min};
 
-/// An alpha beta search player with a bounded depth. This player should only be used for 2 player
-/// games.
-pub struct AlphaBetaPlayer {
+/// A Monte Carlo search player. This player should only be used for 2 player, constant sum,
+/// turn based games.
+pub struct McsPlayer {
     depth_limit: u32,
-    best_move: Option<Move>
+    best_move: Option<Move>,
+    charge_count: u32,
 }
 
-impl AlphaBetaPlayer {
-    /// Returns a AlphaBetaPlayer that does not recurse past the given depth
-    pub fn new(depth: u32) -> AlphaBetaPlayer {
-        AlphaBetaPlayer { depth_limit: depth, best_move: None }
+impl McsPlayer {
+    /// Returns an McsPlayer that begins the random terminal state searches at depth `depth`
+    pub fn new(depth: u32, charge_count: u32) -> McsPlayer {
+        McsPlayer { depth_limit: depth, best_move: None, charge_count: charge_count }
     }
 
     fn best_move(&mut self, game: &Game) -> MoveResult<Move> {
@@ -29,12 +31,14 @@ impl AlphaBetaPlayer {
             return Ok(moves.swap_remove(0));
         }
 
-        let mut max = 0;
         let mut res = moves[0].clone();
+        self.best_move = Some(res.clone());
+
+        let mut max = 0;
         self.best_move = Some(res.clone());
         let opponent = opponent(game, role);
         for m in moves {
-            let score = match self.min_score(game, cur_state, &opponent, m.clone(), 0, 100, 0) {
+            let score = match self.min_score(game, cur_state, opponent, m.clone(), 0, 100, 0) {
                 Ok(score) => score,
                 Err(m) => return Err(m)
             };
@@ -53,7 +57,7 @@ impl AlphaBetaPlayer {
     fn max_score(&mut self, game: &Game, state: &State, role: &Role, alpha: u8, beta: u8,
                  depth: u32) -> MoveResult<Score> {
         if depth >= self.depth_limit {
-            return Ok(game.goal(state, game.role()));
+            return Ok(self.monte_carlo(role, game, state));
         }
 
         if game.is_terminal(state) {
@@ -61,7 +65,7 @@ impl AlphaBetaPlayer {
         }
 
         let moves = game.legal_moves(state, role);
-        assert!(!moves.is_empty(), "No legal moves");
+        assert!(moves.len() >= 1, "No legal moves");
 
         let opponent = opponent(game, role);
         let mut alpha = alpha;
@@ -83,7 +87,7 @@ impl AlphaBetaPlayer {
     fn min_score(&mut self, game: &Game, state: &State, role: &Role, last_move: Move, alpha: u8,
                  beta: u8, depth: u32) -> MoveResult<Score> {
         let moves = game.legal_moves(state, role);
-        assert!(!moves.is_empty(), "No legal moves");
+        assert!(moves.len() >= 1, "No legal moves");
 
         let mut beta = beta;
         for m in moves {
@@ -107,11 +111,41 @@ impl AlphaBetaPlayer {
         Ok(beta)
     }
 
+    fn monte_carlo(&self, role: &Role, game: &Game, state: &State) -> Score {
+        let mut total: u32 = 0;
+        for _ in 0..self.charge_count {
+            total += self.depth_charge(role, game, state) as u32;
+        }
+        (total / self.charge_count) as u8
+    }
+
+    fn depth_charge(&self, role: &Role, game: &Game, state: &State) -> Score {
+        let mut new_state = state.clone();
+        while !game.is_terminal(&new_state) {
+            let mut moves = Vec::with_capacity(game.roles().len());
+            for r in game.roles() {
+                let mut legals = game.legal_moves(state, r);
+                let r = rand::random::<usize>() % legals.len();
+                moves.push(legals.swap_remove(r));
+            }
+
+            new_state = game.next_state(&new_state, &moves);
+        }
+        return game.goal(state, role);
+    }
 }
 
-impl Player for AlphaBetaPlayer {
+fn opponent<'a>(game: &'a Game, role: &'a Role) -> &'a Role {
+    let roles = game.roles();
+    assert!(roles.len() == 2, "Must be a two player game");
+    let res: Vec<_> = roles.into_iter().filter(|r| *r != role).collect();
+    assert_eq!(res.len(), 1);
+    res[0]
+}
+
+impl Player for McsPlayer {
     fn name(&self) -> String {
-        "AlphaBetaPlayer".to_string()
+        "McsPlayer".to_string()
     }
 
     fn select_move(&mut self, game: &Game) -> Move {
@@ -126,12 +160,4 @@ impl Player for AlphaBetaPlayer {
     fn out_of_time(&mut self, _: &Game) -> Move {
         self.best_move.take().unwrap()
     }
-}
-
-fn opponent<'a>(game: &'a Game, role: &'a Role) -> &'a Role {
-    let roles = game.roles();
-    assert!(roles.len() == 2, "Must be a two player game");
-    let res: Vec<_> = roles.into_iter().filter(|r| *r != role).collect();
-    assert_eq!(res.len(), 1);
-    res[0]
 }
