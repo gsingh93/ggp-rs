@@ -95,7 +95,7 @@ mod prover;
 use unicase::UniCase;
 
 use hyper::Server;
-use hyper::error::HttpError::HttpIoError;
+use hyper::error::Error::Io;
 use hyper::server::{Request, Response, Handler};
 use hyper::header::{ContentLength, ContentType, AccessControlAllowOrigin,
                     AccessControlAllowHeaders};
@@ -145,7 +145,7 @@ pub trait Player: Sync + Send {
 pub fn run<T: ToSocketAddrs + 'static, P: Player + Sync + Send + 'static>(host: T, player: P) {
     let handler = GameHandler::new(player);
     match Server::http(handler).listen(host) {
-        Err(HttpIoError(e)) => panic!("{}", e),
+        Err(Io(e)) => panic!("{}", e),
         Err(e) => panic!("{}", e),
         _ => ()
     }
