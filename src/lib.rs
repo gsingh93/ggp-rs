@@ -176,6 +176,10 @@ impl<P: Player> Handler for GameHandler<P> {
             let mut gm = self.gm.lock().unwrap();
             gm.handle(req_str)
         };
+        let response = match response {
+            Some(response) => response,
+            None => return
+        };
         let response = response.into_bytes();
         res.headers_mut().set(ContentLength(response.len() as u64));
         res.headers_mut().set(ContentType("text/acl".parse().unwrap()));

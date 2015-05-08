@@ -315,7 +315,7 @@ impl<P: Player> GameManager<P> {
         GameManager { games: HashMap::new(), player: p }
     }
 
-    pub fn handle(&mut self, request: String) -> String {
+    pub fn handle(&mut self, request: String) -> Option<String> {
         let mut parser = RequestParser::new(request);
         let req = parser.parse();
         debug!("Parsed request: {:?}", req);
@@ -323,45 +323,55 @@ impl<P: Player> GameManager<P> {
             StartRequest(match_id, role, desc, start_clock, play_clock) =>
                 self.handle_start(match_id, role, desc, start_clock, play_clock),
             PlayRequest(match_id, moves) => self.handle_play(match_id, moves),
-            StopRequest(match_id, moves) => self.handle_stop(match_id, moves),
-            InfoRequest => "available".to_string(),
+            StopRequest(match_id, moves) => Some(self.handle_stop(match_id, moves)),
+            InfoRequest => Some("available".to_string()),
             AbortRequest(match_id) =>
-                self.handle_stop(match_id, vec![constants::NIL_MOVE.clone()]),
+                Some(self.handle_stop(match_id, vec![constants::NIL_MOVE.clone()])),
             UnknownRequest(req) => panic!("Unknown request: {}", req)
         }
     }
 
     fn handle_start(&mut self, match_id: String, role: Role, desc: Description,
-                    start_clock: u32, play_clock: u32) -> String {
+                    start_clock: u32, play_clock: u32) -> Option<String> {
         info!("Handling start request" );
-        let game = Game::new(role, start_clock, play_clock, desc);
+        let mut game = Game::new(role, start_clock, play_clock, desc);
+        game.move_start_time = PreciseTime::now();
         self.player.meta_game(&game);
+        if game.move_start_time.to(PreciseTime::now()).num_seconds() >= game.start_clock as i64 {
+            warn!("Move was selected after the start clock expired. No response will be sent.");
+            return None;
+        }
         self.games.insert(match_id, game);
         info!("Sending 'ready'");
-        "ready".to_string()
+        Some("ready".to_string())
     }
 
-    fn handle_play(&mut self, match_id: String, moves: Vec<Move>) -> String {
+    fn handle_play(&mut self, match_id: String, moves: Vec<Move>) -> Option<String> {
         info!("Handling play request");
         let game = match self.games.get_mut(&match_id) {
             Some(game) => game,
             None => {
                 warn!("Match {} doesn't exist, sending 'busy'", match_id);
-                return "busy".to_string();
+                return Some("busy".to_string());
             }
         };
 
         if game.match_state == Finished {
             warn!("Match {} is finished, sending 'busy'", match_id);
-            return "busy".to_string();
+            return Some("busy".to_string());
         }
 
         game.update(&moves);
         game.move_start_time = PreciseTime::now();
         let m = self.player.select_move(game);
+        if game.move_start_time.to(PreciseTime::now()).num_seconds() >= game.play_clock as i64 {
+            warn!("Move was selected after the play clock expired. No response will be sent.");
+            return None;
+        }
+
         let mov = m.to_string();
         info!("Sending {}", mov);
-        mov
+        Some(mov)
     }
 
     fn handle_stop(&mut self, match_id: String, moves: Vec<Move>) -> String {
@@ -664,9 +674,9 @@ mod test {
         let mut gm = GameManager::new(LegalPlayer);
         assert_eq!(
             &gm.handle("(start match_id black ((role black) (input noop) \
-                        (legal black noop)) 10 5)".to_string()),
+                        (legal black noop)) 10 5)".to_string()).unwrap(),
             "ready");
-        assert_eq!(&gm.handle("(play match_id nil)".to_string()), "noop");
+        assert_eq!(&gm.handle("(play match_id nil)".to_string()).unwrap(), "noop");
     }
 
     #[test]
@@ -680,11 +690,12 @@ mod test {
                         (<= (legal red p) (true (control red))) \
                         (init (control black)) \
                         (<= (next (control black)) (true (control red))) \
-                        (<= (next (control red)) (true (control black)))) 10 5)".to_string()),
+                        (<= (next (control red)) (true (control black)))) 10 5)".to_string())
+                .unwrap(),
             "ready");
-        assert_eq!(&gm.handle("(play match_id nil)".to_string()), "p");
-        assert_eq!(&gm.handle("(play match_id (p noop))".to_string()), "noop");
-        assert_eq!(&gm.handle("(play match_id (noop p))".to_string()), "p");
+        assert_eq!(&gm.handle("(play match_id nil)".to_string()).unwrap(), "p");
+        assert_eq!(&gm.handle("(play match_id (p noop))".to_string()).unwrap(), "noop");
+        assert_eq!(&gm.handle("(play match_id (noop p))".to_string()).unwrap(), "p");
     }
 
     #[test]
