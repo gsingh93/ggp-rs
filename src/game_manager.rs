@@ -714,7 +714,6 @@ mod test {
         use std::fs::File;
         use std::io::Read;
 
-        #[ignore]
         #[bench]
         fn bench_tictactoe_heuristic(b: &mut Bencher) {
             let mut gdl = String::new();
