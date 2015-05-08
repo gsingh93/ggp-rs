@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["McsPlayer","A Monte Carlo search player. This player should only be used for 2 player, constant sum, turn based games."]]});

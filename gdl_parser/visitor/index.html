@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `visitor` mod in crate `gdl_parser`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, visitor">
+
+    <title>gdl_parser::visitor - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../../main.css">
+
+    
+    
+</head>
+<body class="rustdoc">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <section class="sidebar">
+        
+        <p class='location'><a href='../index.html'>gdl_parser</a></p><script>window.sidebarCurrent = {name: 'visitor', ty: 'mod', relpath: '../'};</script><script defer src="../sidebar-items.js"></script>
+    </section>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press 'S' to search, '?' for more options..."
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content mod">
+<h1 class='fqn'><span class='in-band'>Module <a href='../index.html'>gdl_parser</a>::<wbr><a class='mod' href=''>visitor</a></span><span class='out-of-band'><span id='render-detail'>
+            <a id="toggle-all-docs" href="#" title="collapse all docs">[&minus;]</a>
+        </span><a id='src-4034' class='srclink' href='../../src/gdl_parser/visitor.rs.html#1-147' title='goto source code'>[src]</a></span></h1>
+<h2 id='traits' class='section-header'><a href="#traits">Traits</a></h2>
+<table>
+                    <tr class=' module-item'>
+                        <td><a class='trait' href='trait.Visitor.html'
+                               title='gdl_parser::visitor::Visitor'>Visitor</a></td>
+                        <td class='docblock short'>
+                             <p>A visitor for the AST. Each function will get called when that respective AST node is visited</p>
+
+                        </td>
+                    </tr>
+                </table><h2 id='functions' class='section-header'><a href="#functions">Functions</a></h2>
+<table>
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.visit.html'
+                               title='gdl_parser::visitor::visit'>visit</a></td>
+                        <td class='docblock short'>
+                             <p>Performs a post-order traversal of a GDL description</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.visit_clause.html'
+                               title='gdl_parser::visitor::visit_clause'>visit_clause</a></td>
+                        <td class='docblock short'>
+                             <p>Performs a post-order traversal of a GDL clause</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.visit_constant.html'
+                               title='gdl_parser::visitor::visit_constant'>visit_constant</a></td>
+                        <td class='docblock short'>
+                             <p>Performs a post-order traversal of a GDL constant</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.visit_distinct.html'
+                               title='gdl_parser::visitor::visit_distinct'>visit_distinct</a></td>
+                        <td class='docblock short'>
+                             <p>Performs a post-order traversal of a GDL distinct literal</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.visit_function.html'
+                               title='gdl_parser::visitor::visit_function'>visit_function</a></td>
+                        <td class='docblock short'>
+                             <p>Performs a post-order traversal of a GDL function</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.visit_literal.html'
+                               title='gdl_parser::visitor::visit_literal'>visit_literal</a></td>
+                        <td class='docblock short'>
+                             <p>Performs a post-order traversal of a GDL literal</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.visit_not.html'
+                               title='gdl_parser::visitor::visit_not'>visit_not</a></td>
+                        <td class='docblock short'>
+                             <p>Performs a post-order traversal of a GDL not literal</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.visit_or.html'
+                               title='gdl_parser::visitor::visit_or'>visit_or</a></td>
+                        <td class='docblock short'>
+                             <p>Performs a post-order traversal of a GDL or literal</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.visit_proposition.html'
+                               title='gdl_parser::visitor::visit_proposition'>visit_proposition</a></td>
+                        <td class='docblock short'>
+                             <p>Performs a post-order traversal of a GDL proposition</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.visit_relation.html'
+                               title='gdl_parser::visitor::visit_relation'>visit_relation</a></td>
+                        <td class='docblock short'>
+                             <p>Performs a post-order traversal of a GDL relation</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.visit_rule.html'
+                               title='gdl_parser::visitor::visit_rule'>visit_rule</a></td>
+                        <td class='docblock short'>
+                             <p>Performs a post-order traversal of a GDL rule</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.visit_sentence.html'
+                               title='gdl_parser::visitor::visit_sentence'>visit_sentence</a></td>
+                        <td class='docblock short'>
+                             <p>Performs a post-order traversal of a GDL sentence</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.visit_term.html'
+                               title='gdl_parser::visitor::visit_term'>visit_term</a></td>
+                        <td class='docblock short'>
+                             <p>Performs a post-order traversal of a GDL term</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.visit_variable.html'
+                               title='gdl_parser::visitor::visit_variable'>visit_variable</a></td>
+                        <td class='docblock short'>
+                             <p>Performs a post-order traversal of a GDL variable</p>
+
+                        </td>
+                    </tr>
+                </table></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <div id="help" class="hidden">
+        <div class="shortcuts">
+            <h1>Keyboard shortcuts</h1>
+            <dl>
+                <dt>?</dt>
+                <dd>Show this help dialog</dd>
+                <dt>S</dt>
+                <dd>Focus the search field</dd>
+                <dt>&larrb;</dt>
+                <dd>Move up in search results</dd>
+                <dt>&rarrb;</dt>
+                <dd>Move down in search results</dd>
+                <dt>&#9166;</dt>
+                <dd>Go to active search result</dd>
+            </dl>
+        </div>
+        <div class="infos">
+            <h1>Search tricks</h1>
+            <p>
+                Prefix searches with a type followed by a colon (e.g.
+                <code>fn:</code>) to restrict the search to a given type.
+            </p>
+            <p>
+                Accepted types are: <code>fn</code>, <code>mod</code>,
+                <code>struct</code>, <code>enum</code>,
+                <code>trait</code>, <code>typedef</code> (or
+                <code>tdef</code>).
+            </p>
+        </div>
+    </div>
+
+    
+
+    <script>
+        window.rootPath = "../../";
+        window.currentCrate = "gdl_parser";
+        window.playgroundUrl = "";
+    </script>
+    <script src="../../jquery.js"></script>
+    <script src="../../main.js"></script>
+    
+    <script async src="../../search-index.js"></script>
+</body>
+</html>

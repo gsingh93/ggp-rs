@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["AlphaBetaPlayer","An alpha beta search player with a bounded depth. This player should only be used for 2 player games."]]});

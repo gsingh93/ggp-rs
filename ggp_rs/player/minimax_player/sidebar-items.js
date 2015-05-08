@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["MinimaxPlayer","A bounded minimax player. This player should only be used for 2 player, constant sum, turn based games."]]});

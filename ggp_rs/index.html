@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `ggp_rs` crate.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, ggp_rs">
+
+    <title>ggp_rs - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../main.css">
+
+    
+    
+</head>
+<body class="rustdoc">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <section class="sidebar">
+        
+        <p class='location'></p><script>window.sidebarCurrent = {name: 'ggp_rs', ty: 'mod', relpath: '../'};</script>
+    </section>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press 'S' to search, '?' for more options..."
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content mod">
+<h1 class='fqn'><span class='in-band'>Crate <a class='mod' href=''>ggp_rs</a></span><span class='out-of-band'><span id='render-detail'>
+            <a id="toggle-all-docs" href="#" title="collapse all docs">[&minus;]</a>
+        </span><a id='src-0' class='srclink' href='../src/ggp_rs/lib.rs.html#1-194' title='goto source code'>[src]</a></span></h1>
+<div class='docblock'><p>A library for creating General Game Playing (GGP) players. This library is based off of
+<a href="https://github.com/ggp-org/ggp-base">GGP Base</a>. While GGP Base allows the creation of
+players backed by a propositional network or a logic prover, this library currently only
+supports logic prover based players.</p>
+
+<h1 id="example" class='section-header'><a
+                           href="#example">Example</a></h1>
+<p>To create your own player, simply implement the <code>Player</code> trait for your struct and pass the
+host/port you want the player to run at and the player itself to the <code>run</code> function.</p>
+
+<p>The following example implements a RandomPlayer, which plays random legal moves each turn.</p>
+<pre id='rust-example-rendered' class='rust '>
+<span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>rand</span>;
+<span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>ggp_rs</span>;
+
+<span class='kw'>use</span> <span class='ident'>ggp_rs</span>::{<span class='ident'>Player</span>, <span class='ident'>Game</span>, <span class='ident'>Move</span>};
+<span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>net</span>::<span class='ident'>Ipv4Addr</span>;
+
+<span class='kw'>struct</span> <span class='ident'>RandomPlayer</span>;
+
+<span class='kw'>impl</span> <span class='ident'>Player</span> <span class='kw'>for</span> <span class='ident'>RandomPlayer</span> {
+    <span class='kw'>fn</span> <span class='ident'>name</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>String</span> {
+        <span class='string'>&quot;RandomPlayer&quot;</span>.<span class='ident'>to_string</span>()
+    }
+
+    <span class='kw'>fn</span> <span class='ident'>select_move</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>, <span class='ident'>game</span>: <span class='kw-2'>&amp;</span><span class='ident'>Game</span>) <span class='op'>-&gt;</span> <span class='ident'>Move</span> {
+        <span class='kw'>let</span> <span class='ident'>state</span> <span class='op'>=</span> <span class='ident'>game</span>.<span class='ident'>current_state</span>();
+        <span class='kw'>let</span> <span class='ident'>role</span> <span class='op'>=</span> <span class='ident'>game</span>.<span class='ident'>role</span>();
+        <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>moves</span> <span class='op'>=</span> <span class='ident'>game</span>.<span class='ident'>legal_moves</span>(<span class='ident'>state</span>, <span class='ident'>role</span>);
+        <span class='kw'>let</span> <span class='ident'>r</span> <span class='op'>=</span> <span class='ident'>rand</span>::<span class='ident'>random</span>::<span class='op'>&lt;</span><span class='ident'>usize</span><span class='op'>&gt;</span>() <span class='op'>%</span> <span class='ident'>moves</span>.<span class='ident'>len</span>();
+        <span class='ident'>moves</span>.<span class='ident'>swap_remove</span>(<span class='ident'>r</span>)
+    }
+}
+
+<span class='kw'>fn</span> <span class='ident'>main</span>() {
+    <span class='ident'>ggp_rs</span>::<span class='ident'>run</span>((<span class='ident'>Ipv4Addr</span>::<span class='ident'>new</span>(<span class='number'>0</span>,<span class='number'>0</span>,<span class='number'>0</span>,<span class='number'>0</span>), <span class='number'>9147</span>), <span class='ident'>RandomPlayer</span>);
+}
+</pre>
+</div><h2 id='modules' class='section-header'><a href="#modules">Modules</a></h2>
+<table>
+                    <tr class=' module-item'>
+                        <td><a class='mod' href='player/index.html'
+                               title='ggp_rs::player'>player</a></td>
+                        <td class='docblock short'>
+                             <p>Ready to use GGP players</p>
+
+                        </td>
+                    </tr>
+                </table><h2 id='macros' class='section-header'><a href="#macros">Macros</a></h2>
+<table>
+                    <tr class=' module-item'>
+                        <td><a class='macro' href='macro.check_time!.html'
+                               title='ggp_rs::check_time!'>check_time!</a></td>
+                        <td class='docblock short'>
+                             <p>Checks whether we are out of time, and if so, returns the move selected by
+<code>Player::out_of_time</code>.</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='macro' href='macro.check_time_result!.html'
+                               title='ggp_rs::check_time_result!'>check_time_result!</a></td>
+                        <td class='docblock short'>
+                             <p>Checks whether we are out of time, and if so, returns the move selected by
+<code>Player::out_of_time</code> wrapped in a <code>MoveResult</code>.</p>
+
+                        </td>
+                    </tr>
+                </table><h2 id='structs' class='section-header'><a href="#structs">Structs</a></h2>
+<table>
+                    <tr class=' module-item'>
+                        <td><a class='struct' href='struct.Game.html'
+                               title='ggp_rs::Game'>Game</a></td>
+                        <td class='docblock short'>
+                             <p>A description of a game. The methods of this object use a logic prover to find all true
+statements that satisfy a given query (i.e. find all legal moves). Note that queries are
+cached, so calling a method that performs a query twice will only pay for any necessary
+clones, another query will not be performed.</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='struct' href='struct.Move.html'
+                               title='ggp_rs::Move'>Move</a></td>
+                        <td class='docblock short'>
+                             <p>A move in a game</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='struct' href='struct.Role.html'
+                               title='ggp_rs::Role'>Role</a></td>
+                        <td class='docblock short'>
+                             <p>A role in a game</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='struct' href='struct.State.html'
+                               title='ggp_rs::State'>State</a></td>
+                        <td class='docblock short'>
+                             <p>The state of a game, containing all <code>Sentence</code>s that are true in this state</p>
+
+                        </td>
+                    </tr>
+                </table><h2 id='traits' class='section-header'><a href="#traits">Traits</a></h2>
+<table>
+                    <tr class=' module-item'>
+                        <td><a class='trait' href='trait.Player.html'
+                               title='ggp_rs::Player'>Player</a></td>
+                        <td class='docblock short'>
+                             <p>A GGP player</p>
+
+                        </td>
+                    </tr>
+                </table><h2 id='functions' class='section-header'><a href="#functions">Functions</a></h2>
+<table>
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.run.html'
+                               title='ggp_rs::run'>run</a></td>
+                        <td class='docblock short'>
+                             <p>Starts a GGP player listening at <code>host</code></p>
+
+                        </td>
+                    </tr>
+                </table><h2 id='types' class='section-header'><a href="#types">Type Definitions</a></h2>
+<table>
+                    <tr class=' module-item'>
+                        <td><a class='type' href='type.MoveResult.html'
+                               title='ggp_rs::MoveResult'>MoveResult</a></td>
+                        <td class='docblock short'>
+                             <p>This type meant to be used in GGP players for returning a move when time runs out. For
+functions that would normally have a return type <code>T</code>, you can return a <code>MoveResult&lt;T&gt;</code> instead.
+On normal execution, an <code>Ok(T)</code> can be returned, and when out of time an <code>Err(Move)</code> can
+be returned. You can implement this logic yourself or just use the provided
+<code>check_time_result!</code> macro.</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='type' href='type.Score.html'
+                               title='ggp_rs::Score'>Score</a></td>
+                        <td class='docblock short'>
+                             <p>The score a player can get at a goal state</p>
+
+                        </td>
+                    </tr>
+                </table></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <div id="help" class="hidden">
+        <div class="shortcuts">
+            <h1>Keyboard shortcuts</h1>
+            <dl>
+                <dt>?</dt>
+                <dd>Show this help dialog</dd>
+                <dt>S</dt>
+                <dd>Focus the search field</dd>
+                <dt>&larrb;</dt>
+                <dd>Move up in search results</dd>
+                <dt>&rarrb;</dt>
+                <dd>Move down in search results</dd>
+                <dt>&#9166;</dt>
+                <dd>Go to active search result</dd>
+            </dl>
+        </div>
+        <div class="infos">
+            <h1>Search tricks</h1>
+            <p>
+                Prefix searches with a type followed by a colon (e.g.
+                <code>fn:</code>) to restrict the search to a given type.
+            </p>
+            <p>
+                Accepted types are: <code>fn</code>, <code>mod</code>,
+                <code>struct</code>, <code>enum</code>,
+                <code>trait</code>, <code>typedef</code> (or
+                <code>tdef</code>).
+            </p>
+        </div>
+    </div>
+
+    
+
+    <script>
+        window.rootPath = "../";
+        window.currentCrate = "ggp_rs";
+        window.playgroundUrl = "";
+    </script>
+    <script src="../jquery.js"></script>
+    <script src="../main.js"></script>
+    
+    <script async src="../search-index.js"></script>
+</body>
+</html>

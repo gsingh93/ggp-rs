@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["RandomPlayer","A player that chooses a random move from all possible of legal moves"]]});

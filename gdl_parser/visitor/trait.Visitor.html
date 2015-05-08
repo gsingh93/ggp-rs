@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `Visitor` trait in crate `gdl_parser`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, Visitor">
+
+    <title>gdl_parser::visitor::Visitor - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../../main.css">
+
+    
+    
+</head>
+<body class="rustdoc">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <section class="sidebar">
+        
+        <p class='location'><a href='../index.html'>gdl_parser</a>::<wbr><a href='index.html'>visitor</a></p><script>window.sidebarCurrent = {name: 'Visitor', ty: 'trait', relpath: ''};</script><script defer src="sidebar-items.js"></script>
+    </section>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press 'S' to search, '?' for more options..."
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content trait">
+<h1 class='fqn'><span class='in-band'>Trait <a href='../index.html'>gdl_parser</a>::<wbr><a href='index.html'>visitor</a>::<wbr><a class='trait' href=''>Visitor</a></span><span class='out-of-band'><span id='render-detail'>
+            <a id="toggle-all-docs" href="#" title="collapse all docs">[&minus;]</a>
+        </span><a id='src-4067' class='srclink' href='../../src/gdl_parser/visitor.rs.html#9-35' title='goto source code'>[src]</a></span></h1>
+<pre class='rust trait'>pub trait Visitor {
+    fn <a href='#method.visit_clause' class='fnname'>visit_clause</a>(&amp;mut self, _: &amp;mut <a class='enum' href='../../gdl_parser/enum.Clause.html' title='gdl_parser::Clause'>Clause</a>) { ... }
+    fn <a href='#method.visit_rule' class='fnname'>visit_rule</a>(&amp;mut self, _: &amp;mut <a class='struct' href='../../gdl_parser/struct.Rule.html' title='gdl_parser::Rule'>Rule</a>) { ... }
+    fn <a href='#method.visit_sentence' class='fnname'>visit_sentence</a>(&amp;mut self, _: &amp;mut <a class='enum' href='../../gdl_parser/enum.Sentence.html' title='gdl_parser::Sentence'>Sentence</a>) { ... }
+    fn <a href='#method.visit_proposition' class='fnname'>visit_proposition</a>(&amp;mut self, _: &amp;mut <a class='struct' href='../../gdl_parser/struct.Proposition.html' title='gdl_parser::Proposition'>Proposition</a>) { ... }
+    fn <a href='#method.visit_relation' class='fnname'>visit_relation</a>(&amp;mut self, _: &amp;mut <a class='struct' href='../../gdl_parser/struct.Relation.html' title='gdl_parser::Relation'>Relation</a>) { ... }
+    fn <a href='#method.visit_literal' class='fnname'>visit_literal</a>(&amp;mut self, _: &amp;mut <a class='enum' href='../../gdl_parser/enum.Literal.html' title='gdl_parser::Literal'>Literal</a>) { ... }
+    fn <a href='#method.visit_term' class='fnname'>visit_term</a>(&amp;mut self, _: &amp;mut <a class='enum' href='../../gdl_parser/enum.Term.html' title='gdl_parser::Term'>Term</a>) { ... }
+    fn <a href='#method.visit_constant' class='fnname'>visit_constant</a>(&amp;mut self, _: &amp;mut <a class='struct' href='../../gdl_parser/struct.Constant.html' title='gdl_parser::Constant'>Constant</a>) { ... }
+    fn <a href='#method.visit_or' class='fnname'>visit_or</a>(&amp;mut self, _: &amp;mut <a class='struct' href='../../gdl_parser/struct.Or.html' title='gdl_parser::Or'>Or</a>) { ... }
+    fn <a href='#method.visit_not' class='fnname'>visit_not</a>(&amp;mut self, _: &amp;mut <a class='struct' href='../../gdl_parser/struct.Not.html' title='gdl_parser::Not'>Not</a>) { ... }
+    fn <a href='#method.visit_distinct' class='fnname'>visit_distinct</a>(&amp;mut self, _: &amp;mut <a class='struct' href='../../gdl_parser/struct.Distinct.html' title='gdl_parser::Distinct'>Distinct</a>) { ... }
+    fn <a href='#method.visit_variable' class='fnname'>visit_variable</a>(&amp;mut self, _: &amp;mut <a class='struct' href='../../gdl_parser/struct.Variable.html' title='gdl_parser::Variable'>Variable</a>) { ... }
+    fn <a href='#method.visit_function' class='fnname'>visit_function</a>(&amp;mut self, _: &amp;mut <a class='struct' href='../../gdl_parser/struct.Function.html' title='gdl_parser::Function'>Function</a>) { ... }
+}</pre><div class='docblock'><p>A visitor for the AST. Each function will get called when that respective AST node is visited</p>
+</div>
+            <h2 id='provided-methods'>Provided Methods</h2>
+            <div class='methods'>
+        <h3 id='method.visit_clause' class='method stab '><code>fn <a href='#method.visit_clause' class='fnname'>visit_clause</a>(&amp;mut self, _: &amp;mut <a class='enum' href='../../gdl_parser/enum.Clause.html' title='gdl_parser::Clause'>Clause</a>)</code></h3><h3 id='method.visit_rule' class='method stab '><code>fn <a href='#method.visit_rule' class='fnname'>visit_rule</a>(&amp;mut self, _: &amp;mut <a class='struct' href='../../gdl_parser/struct.Rule.html' title='gdl_parser::Rule'>Rule</a>)</code></h3><h3 id='method.visit_sentence' class='method stab '><code>fn <a href='#method.visit_sentence' class='fnname'>visit_sentence</a>(&amp;mut self, _: &amp;mut <a class='enum' href='../../gdl_parser/enum.Sentence.html' title='gdl_parser::Sentence'>Sentence</a>)</code></h3><h3 id='method.visit_proposition' class='method stab '><code>fn <a href='#method.visit_proposition' class='fnname'>visit_proposition</a>(&amp;mut self, _: &amp;mut <a class='struct' href='../../gdl_parser/struct.Proposition.html' title='gdl_parser::Proposition'>Proposition</a>)</code></h3><h3 id='method.visit_relation' class='method stab '><code>fn <a href='#method.visit_relation' class='fnname'>visit_relation</a>(&amp;mut self, _: &amp;mut <a class='struct' href='../../gdl_parser/struct.Relation.html' title='gdl_parser::Relation'>Relation</a>)</code></h3><h3 id='method.visit_literal' class='method stab '><code>fn <a href='#method.visit_literal' class='fnname'>visit_literal</a>(&amp;mut self, _: &amp;mut <a class='enum' href='../../gdl_parser/enum.Literal.html' title='gdl_parser::Literal'>Literal</a>)</code></h3><h3 id='method.visit_term' class='method stab '><code>fn <a href='#method.visit_term' class='fnname'>visit_term</a>(&amp;mut self, _: &amp;mut <a class='enum' href='../../gdl_parser/enum.Term.html' title='gdl_parser::Term'>Term</a>)</code></h3><h3 id='method.visit_constant' class='method stab '><code>fn <a href='#method.visit_constant' class='fnname'>visit_constant</a>(&amp;mut self, _: &amp;mut <a class='struct' href='../../gdl_parser/struct.Constant.html' title='gdl_parser::Constant'>Constant</a>)</code></h3><h3 id='method.visit_or' class='method stab '><code>fn <a href='#method.visit_or' class='fnname'>visit_or</a>(&amp;mut self, _: &amp;mut <a class='struct' href='../../gdl_parser/struct.Or.html' title='gdl_parser::Or'>Or</a>)</code></h3><h3 id='method.visit_not' class='method stab '><code>fn <a href='#method.visit_not' class='fnname'>visit_not</a>(&amp;mut self, _: &amp;mut <a class='struct' href='../../gdl_parser/struct.Not.html' title='gdl_parser::Not'>Not</a>)</code></h3><h3 id='method.visit_distinct' class='method stab '><code>fn <a href='#method.visit_distinct' class='fnname'>visit_distinct</a>(&amp;mut self, _: &amp;mut <a class='struct' href='../../gdl_parser/struct.Distinct.html' title='gdl_parser::Distinct'>Distinct</a>)</code></h3><h3 id='method.visit_variable' class='method stab '><code>fn <a href='#method.visit_variable' class='fnname'>visit_variable</a>(&amp;mut self, _: &amp;mut <a class='struct' href='../../gdl_parser/struct.Variable.html' title='gdl_parser::Variable'>Variable</a>)</code></h3><h3 id='method.visit_function' class='method stab '><code>fn <a href='#method.visit_function' class='fnname'>visit_function</a>(&amp;mut self, _: &amp;mut <a class='struct' href='../../gdl_parser/struct.Function.html' title='gdl_parser::Function'>Function</a>)</code></h3></div>
+        <h2 id='implementors'>Implementors</h2>
+        <ul class='item-list' id='implementors-list'>
+    </ul><script type="text/javascript" async
+                              src="../../implementors/gdl_parser/visitor/trait.Visitor.js">
+                      </script></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <div id="help" class="hidden">
+        <div class="shortcuts">
+            <h1>Keyboard shortcuts</h1>
+            <dl>
+                <dt>?</dt>
+                <dd>Show this help dialog</dd>
+                <dt>S</dt>
+                <dd>Focus the search field</dd>
+                <dt>&larrb;</dt>
+                <dd>Move up in search results</dd>
+                <dt>&rarrb;</dt>
+                <dd>Move down in search results</dd>
+                <dt>&#9166;</dt>
+                <dd>Go to active search result</dd>
+            </dl>
+        </div>
+        <div class="infos">
+            <h1>Search tricks</h1>
+            <p>
+                Prefix searches with a type followed by a colon (e.g.
+                <code>fn:</code>) to restrict the search to a given type.
+            </p>
+            <p>
+                Accepted types are: <code>fn</code>, <code>mod</code>,
+                <code>struct</code>, <code>enum</code>,
+                <code>trait</code>, <code>typedef</code> (or
+                <code>tdef</code>).
+            </p>
+        </div>
+    </div>
+
+    
+
+    <script>
+        window.rootPath = "../../";
+        window.currentCrate = "gdl_parser";
+        window.playgroundUrl = "";
+    </script>
+    <script src="../../jquery.js"></script>
+    <script src="../../main.js"></script>
+    
+    <script async src="../../search-index.js"></script>
+</body>
+</html>

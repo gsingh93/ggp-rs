@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `gdl_parser` crate.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, gdl_parser">
+
+    <title>gdl_parser - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../main.css">
+
+    
+    
+</head>
+<body class="rustdoc">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <section class="sidebar">
+        
+        <p class='location'></p><script>window.sidebarCurrent = {name: 'gdl_parser', ty: 'mod', relpath: '../'};</script>
+    </section>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press 'S' to search, '?' for more options..."
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content mod">
+<h1 class='fqn'><span class='in-band'>Crate <a class='mod' href=''>gdl_parser</a></span><span class='out-of-band'><span id='render-detail'>
+            <a id="toggle-all-docs" href="#" title="collapse all docs">[&minus;]</a>
+        </span><a id='src-0' class='srclink' href='../src/gdl_parser/lib.rs.html#1-442' title='goto source code'>[src]</a></span></h1>
+<div class='docblock'><p>This crate provides a function for parsing a GDL description to an AST. To get an AST, call the
+<code>parse</code> function with the string representing the description. The AST is based off the
+<a href="http://www.ggp.org/developers/gdl.html">AST</a> used in
+<a href="https://github.com/ggp-org/ggp-base">GGP Base</a>.</p>
+</div><h2 id='modules' class='section-header'><a href="#modules">Modules</a></h2>
+<table>
+                    <tr class=' module-item'>
+                        <td><a class='mod' href='visitor/index.html'
+                               title='gdl_parser::visitor'>visitor</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                </table><h2 id='structs' class='section-header'><a href="#structs">Structs</a></h2>
+<table>
+                    <tr class=' module-item'>
+                        <td><a class='struct' href='struct.Constant.html'
+                               title='gdl_parser::Constant'>Constant</a></td>
+                        <td class='docblock short'>
+                             <p>A GDL constant</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='struct' href='struct.Description.html'
+                               title='gdl_parser::Description'>Description</a></td>
+                        <td class='docblock short'>
+                             <p>A GDL description. Contains a vector of <code>Clause</code>s, which are the top-level statements in
+a GDL description.</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='struct' href='struct.Distinct.html'
+                               title='gdl_parser::Distinct'>Distinct</a></td>
+                        <td class='docblock short'>
+                             <p>A distinct literal</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='struct' href='struct.Function.html'
+                               title='gdl_parser::Function'>Function</a></td>
+                        <td class='docblock short'>
+                             <p>A function term</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='struct' href='struct.Not.html'
+                               title='gdl_parser::Not'>Not</a></td>
+                        <td class='docblock short'>
+                             <p>A not literal</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='struct' href='struct.Or.html'
+                               title='gdl_parser::Or'>Or</a></td>
+                        <td class='docblock short'>
+                             <p>An or literal</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='struct' href='struct.Proposition.html'
+                               title='gdl_parser::Proposition'>Proposition</a></td>
+                        <td class='docblock short'>
+                             <p>A proposition is a <code>Relation</code> with no body; it only has a name.</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='struct' href='struct.Relation.html'
+                               title='gdl_parser::Relation'>Relation</a></td>
+                        <td class='docblock short'>
+                             <p>A GDL relation</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='struct' href='struct.Rule.html'
+                               title='gdl_parser::Rule'>Rule</a></td>
+                        <td class='docblock short'>
+                             <p>A GDL rule contains a head <code>Sentence</code> that is implied by all the <code>Literal</code>s in the body</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='struct' href='struct.Variable.html'
+                               title='gdl_parser::Variable'>Variable</a></td>
+                        <td class='docblock short'>
+                             <p>A variable term</p>
+
+                        </td>
+                    </tr>
+                </table><h2 id='enums' class='section-header'><a href="#enums">Enums</a></h2>
+<table>
+                    <tr class=' module-item'>
+                        <td><a class='enum' href='enum.Clause.html'
+                               title='gdl_parser::Clause'>Clause</a></td>
+                        <td class='docblock short'>
+                             <p>A top level statement in GDL. The only types of top level statements are <code>Rule</code>s and
+<code>Sentence</code>s</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='enum' href='enum.Literal.html'
+                               title='gdl_parser::Literal'>Literal</a></td>
+                        <td class='docblock short'>
+                             <p>A GDL literal</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='enum' href='enum.Sentence.html'
+                               title='gdl_parser::Sentence'>Sentence</a></td>
+                        <td class='docblock short'>
+                             <p>A GDL sentence is like a <code>Rule</code> without a body. The two types of <code>Sentence</code>s are <code>Relation</code>s
+and <code>Proposition</code>s</p>
+
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='enum' href='enum.Term.html'
+                               title='gdl_parser::Term'>Term</a></td>
+                        <td class='docblock short'>
+                             <p>A GDL term is either a variable, a function, or a constant</p>
+
+                        </td>
+                    </tr>
+                </table><h2 id='functions' class='section-header'><a href="#functions">Functions</a></h2>
+<table>
+                    <tr class=' module-item'>
+                        <td><a class='fn' href='fn.parse.html'
+                               title='gdl_parser::parse'>parse</a></td>
+                        <td class='docblock short'>
+                             <p>Parse a GDL string to a <code>Description</code>. Panics if the description is invalid.</p>
+
+                        </td>
+                    </tr>
+                </table></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <div id="help" class="hidden">
+        <div class="shortcuts">
+            <h1>Keyboard shortcuts</h1>
+            <dl>
+                <dt>?</dt>
+                <dd>Show this help dialog</dd>
+                <dt>S</dt>
+                <dd>Focus the search field</dd>
+                <dt>&larrb;</dt>
+                <dd>Move up in search results</dd>
+                <dt>&rarrb;</dt>
+                <dd>Move down in search results</dd>
+                <dt>&#9166;</dt>
+                <dd>Go to active search result</dd>
+            </dl>
+        </div>
+        <div class="infos">
+            <h1>Search tricks</h1>
+            <p>
+                Prefix searches with a type followed by a colon (e.g.
+                <code>fn:</code>) to restrict the search to a given type.
+            </p>
+            <p>
+                Accepted types are: <code>fn</code>, <code>mod</code>,
+                <code>struct</code>, <code>enum</code>,
+                <code>trait</code>, <code>typedef</code> (or
+                <code>tdef</code>).
+            </p>
+        </div>
+    </div>
+
+    
+
+    <script>
+        window.rootPath = "../";
+        window.currentCrate = "gdl_parser";
+        window.playgroundUrl = "";
+    </script>
+    <script src="../jquery.js"></script>
+    <script src="../main.js"></script>
+    
+    <script async src="../search-index.js"></script>
+</body>
+</html>
