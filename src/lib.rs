@@ -142,7 +142,7 @@ pub trait Player: Send {
 }
 
 /// Starts a GGP player listening at `host`
-pub fn run<T: ToSocketAddrs + 'static, P: Player + Sync + Send + 'static>(host: T, player: P) {
+pub fn run<T: ToSocketAddrs + 'static, P: Player + 'static>(host: T, player: P) {
     let handler = GameHandler::new(player);
     match Server::http(handler).listen(host) {
         Err(Io(e)) => panic!("{}", e),

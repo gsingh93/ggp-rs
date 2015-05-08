@@ -126,8 +126,8 @@ impl RuleMap {
             debug!("state: {:?}", state_str);
         }
         let mut rule_map = HashMap::new();
-        rule_map.insert(Constant::new("true"), trues);
-        rule_map.insert(Constant::new("does"), does);
+        rule_map.insert(constants::TRUE_CONST.clone(), trues);
+        rule_map.insert(constants::DOES_CONST.clone(), does);
 
         RuleMap { map: rule_map }
     }
