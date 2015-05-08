@@ -13,7 +13,7 @@
 
 use std::collections::{HashSet, HashMap, VecDeque, BTreeSet};
 use std::cell::RefCell;
-use std::sync::Arc;
+use std::rc::Rc;
 
 use game_manager::State;
 use prover::negative_literal_mover;
@@ -30,7 +30,7 @@ use gdl::Sentence::{PropSentence, RelSentence};
 use gdl::Term::ConstTerm;
 
 struct Cache {
-    cache: HashMap<Arc<Relation>, HashSet<Relation>>
+    cache: HashMap<Rc<Relation>, HashSet<Relation>>
 }
 
 impl Cache {
@@ -38,7 +38,7 @@ impl Cache {
         Cache { cache: HashMap::new() }
     }
 
-    fn insert(&mut self, rel: &Relation, renamed_rel: Arc<Relation>,
+    fn insert(&mut self, rel: &Relation, renamed_rel: Rc<Relation>,
               results: &HashSet<Substitution>) {
         // We store relations instead of substitutions so that if the same sentence is queried
         // with different variables, we can extract a new substitution that uses the correct
@@ -66,13 +66,13 @@ impl Cache {
 
 struct RecursionContext {
     /// Contains all relations that have been asked about but have not received answers
-    already_asking: HashSet<Arc<Relation>>,
+    already_asking: HashSet<Rc<Relation>>,
 
     /// Contains all relations that have asked about themselves recursively
-    called_recursively: HashSet<Arc<Relation>>,
+    called_recursively: HashSet<Rc<Relation>>,
 
     /// Contains a mapping of relations to their (possibly partial) unification results
-    previous_results: HashMap<Arc<Relation>, HashSet<Relation>>,
+    previous_results: HashMap<Rc<Relation>, HashSet<Relation>>,
     state: RuleMap,
     renamer: VarRenamer,
 
@@ -90,7 +90,7 @@ impl RecursionContext {
 
 /// A mapping between rule heads and rules
 struct RuleMap {
-    map: HashMap<Constant, Vec<Arc<Rule>>>
+    map: HashMap<Constant, Vec<Rc<Rule>>>
 }
 
 impl RuleMap {
@@ -103,7 +103,7 @@ impl RuleMap {
             };
             // The closure should prevent unnecessary allocation of empty `Vec`s
             let v = entry.or_insert_with(|| Vec::new());
-            v.push(Arc::new(r));
+            v.push(Rc::new(r));
         }
         RuleMap { map: rule_map }
     }
@@ -113,16 +113,16 @@ impl RuleMap {
         let mut does = Vec::new();
         for s in state.props().iter().cloned() {
             if *s.name() == *constants::TRUE_CONST {
-                trues.push(Arc::new(s.into()))
+                trues.push(Rc::new(s.into()))
             } else if *s.name() == *constants::DOES_CONST {
-                does.push(Arc::new(s.into()));
+                does.push(Rc::new(s.into()));
             } else {
                 panic!("State contains something other than `true` and `does`");
             }
         }
         if cfg!(debug_assertions) {
             let state_str: Vec<_> =
-                trues.iter().chain(does.iter()).map(|x: &Arc<Rule>| x.head.to_string()).collect();
+                trues.iter().chain(does.iter()).map(|x: &Rc<Rule>| x.head.to_string()).collect();
             debug!("state: {:?}", state_str);
         }
         let mut rule_map = HashMap::new();
@@ -132,7 +132,7 @@ impl RuleMap {
         RuleMap { map: rule_map }
     }
 
-    fn get(&self, name: &Constant) -> Option<&Vec<Arc<Rule>>> {
+    fn get(&self, name: &Constant) -> Option<&Vec<Rc<Rule>>> {
         self.map.get(name)
     }
 }
@@ -227,7 +227,7 @@ impl Prover {
             RelSentence(rel) => rel,
             _ => panic!("Expected relation")
         };
-        let renamed_rel = Arc::new(renamed_rel);
+        let renamed_rel = Rc::new(renamed_rel);
 
         // If the answer to this query exists in the fixed cache, return it. Otherwise, check the
         // normal cache.
@@ -267,7 +267,7 @@ impl Prover {
             }
             context.already_asking.insert(renamed_rel.clone());
 
-            let mut candidates: HashSet<Arc<Rule>> = HashSet::new();
+            let mut candidates: HashSet<Rc<Rule>> = HashSet::new();
 
             // Check whether the relation is already a true statement
             if let Some(rules) = context.state.get(&rel.name) {
@@ -343,7 +343,7 @@ impl Prover {
     }
 
     fn get_relation_results(&self, rel: &Relation, theta: &Substitution,
-                            candidates: &HashSet<Arc<Rule>>, context: &mut RecursionContext,
+                            candidates: &HashSet<Rc<Rule>>, context: &mut RecursionContext,
                             is_constant: &mut bool) -> HashSet<Substitution> {
         let mut new_results = HashSet::new();
         debug!("{} candidates found for unification with {}", candidates.len(), rel);

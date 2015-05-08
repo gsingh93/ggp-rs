@@ -113,7 +113,7 @@ pub use game_manager::{Game, State};
 pub use gdl::{Move, Role, Score};
 
 /// A GGP player
-pub trait Player: Sync + Send {
+pub trait Player: Send {
     /// Returns the name of this player
     fn name(&self) -> String;
 
@@ -151,17 +151,21 @@ pub fn run<T: ToSocketAddrs + 'static, P: Player + Sync + Send + 'static>(host: 
     }
 }
 
-struct GameHandler<P: Player + Send> {
+struct GameHandler<P: Player> {
     pub gm: Mutex<GameManager<P>>
 }
 
-impl<P: Player + Send> GameHandler<P> {
+impl<P: Player> GameHandler<P> {
     pub fn new(player: P) -> GameHandler<P> {
         GameHandler { gm: Mutex::new(GameManager::new(player)) }
     }
 }
 
-impl<P: Player + Sync + Send> Handler for GameHandler<P> {
+// This is unsafe because `GameManager` contains `Rc`s. If we're careful, we can use these `Rc`s
+// safely and not have to resort to `Arc`s, which are slower.
+unsafe impl<P: Player> Send for GameManager<P> {}
+
+impl<P: Player> Handler for GameHandler<P> {
     fn handle(&self, mut req: Request, mut res: Response<Fresh>) {
         let mut req_str = String::new();
         req.read_to_string(&mut req_str).unwrap();
