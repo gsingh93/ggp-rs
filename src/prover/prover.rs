@@ -45,7 +45,7 @@ impl Cache {
         // variables.
         let mut sentences = HashSet::with_capacity(results.len());
         for res in results.iter() {
-            sentences.insert(literal_into_relation(res.substitute(&rel.clone().into())));
+            sentences.insert(literal_into_relation(res.substitute(rel.clone().into())));
         }
         self.cache.insert(renamed_rel, sentences);
     }
@@ -160,8 +160,8 @@ impl Prover {
     pub fn ask(&self, query: Sentence, state: &State) -> QueryResult {
         debug!("Beginning unification of query {}", query);
         let mut goals = VecDeque::new();
-        let query: Literal = query.into();
-        goals.push_front(query.clone());
+        let query_lit: Literal = query.into();
+        goals.push_front(query_lit.clone());
 
         let mut context = RecursionContext::new(RuleMap::from_state(state));
         let mut results = HashSet::new();
@@ -169,7 +169,7 @@ impl Prover {
 
         let mut props = HashSet::with_capacity(results.len());
         for theta in results {
-            let s = match theta.substitute(&query) {
+            let s = match theta.substitute(query_lit.clone()) {
                 PropLit(prop) => PropSentence(prop),
                 RelLit(rel) => RelSentence(rel),
                 _ => panic!("Expected sentence")
@@ -192,7 +192,7 @@ impl Prover {
             Some(l) => l
         };
 
-        let q = theta.substitute(&l);
+        let q = theta.substitute(l.clone());
         debug!("Goal query: {} (original: {})", q, l);
         let is_constant = match q {
             OrLit(or) => self.ask_or(or, goals, results, theta, context),
@@ -292,7 +292,7 @@ impl Prover {
                 for res in new_results.iter() {
                     let s: Sentence = rel.clone().into();
                     let l: Literal = s.into();
-                    let sentence = literal_into_relation(res.substitute(&l));
+                    let sentence = literal_into_relation(res.substitute(l));
                     sentence_results.insert(sentence);
                 }
 
@@ -310,7 +310,7 @@ impl Prover {
                     for res in new_results.iter() {
                         let s: Sentence = rel.clone().into();
                         let l: Literal = s.into();
-                        let sentence = literal_into_relation(res.substitute(&l));
+                        let sentence = literal_into_relation(res.substitute(l));
                         sentence_results.insert(sentence);
                     }
                 }

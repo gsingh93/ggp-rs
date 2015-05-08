@@ -16,8 +16,7 @@ impl Substitution {
         Substitution { mapping: BTreeMap::new() }
     }
 
-    pub fn substitute(&self, l: &Literal) -> Literal {
-        let mut l = l.clone();
+    pub fn substitute(&self, mut l: Literal) -> Literal {
         let mut v = SubstitutionVisitor { theta: self };
         visitor::visit_literal(&mut l, &mut v);
         l
@@ -25,9 +24,7 @@ impl Substitution {
 
     pub fn compose(&self, theta: Substitution) -> Substitution {
         let mut t = self.clone();
-        for (k, v) in theta.mapping {
-            t.insert(k, v);
-        }
+        t.mapping.extend(theta.mapping);
         t
     }
 
@@ -102,6 +99,6 @@ mod test {
         mapping.insert(Variable::new("R2"), Constant::new("1").into());
         let theta = Substitution { mapping: mapping };
 
-        assert_eq!(theta.substitute(&a), b);
+        assert_eq!(theta.substitute(a), b);
     }
 }
