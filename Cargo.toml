@@ -1,6 +1,6 @@
 [package]
 name = "ggp-rs"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Gulshan Singh <gulshan@umich.edu>"]
 description = "A library for creating General Game Playing (GGP) players"
 license = "MIT"
