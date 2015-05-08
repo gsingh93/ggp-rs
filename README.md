@@ -1,7 +1,7 @@
 ggp-rs [![Build Status](https://travis-ci.org/gsingh93/ggp-rs.svg?branch=master)](https://travis-ci.org/gsingh93/ggp-rs) [![](https://meritbadge.herokuapp.com/ggp-rs)](https://crates.io/crates/ggp-rs)
 ======
 
-`ggp-rs` is a library for creating GGP (general game playing) players in Rust that is based off of [GGP Base](https://github.com/ggp-org/ggp-base). While GGP Base allows the creation of players backed by a propositional network or a logic prover, this library currently only supports logic prover based players. The performance of this logic prover is comparable, if not faster, than the one in GGP Base.
+`ggp-rs` is a library for creating GGP (general game playing) players in Rust that is based off of [GGP Base](https://github.com/ggp-org/ggp-base). While GGP Base allows the creation of players backed by a propositional network or a logic prover, this library currently only supports logic prover based players. The performance of this logic prover is comparable to the one in GGP Base.
 
 Please file an [issue](https://github.com/gsingh93/ggp-rs/issues) to report a bug or request a feature. Pull requests are welcome.
 
@@ -48,6 +48,8 @@ fn main() {
 To test the player you can use the `Server` application in GGP Base or make an account on [Tiltyard](http://tiltyard.ggp.org/) and add your player. Note that you should run your player with `cargo run --release` or your player may not be fast enough for most games.
 
 More examples and players can be found in `src/player`.
+
+Note that `ggp-rs` outputs logging information that you might find useful. It is recommend to set the log level to at least warnings and higher, and this can be increased to info (or debug, but debug is not recommended) for more information. To set the log levels to warning, initialize an `env_logger` and run cargo with the `RUST_LOG` variable, i.e. `RUST_LOG=ggp_rs=warn cargo run --release`.
 
 ### Documentation
 
